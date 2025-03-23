@@ -424,7 +424,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     no_save = False
-    args.wandb = 0
+    args.wandb = 1
 
     # ########
     # args.vsc = 0
@@ -449,7 +449,7 @@ if __name__ == '__main__':
     # args.compute_objectives = ["EO"]
     # args.distance_metrics = ["HMOM"] * 2
     # args.distance_metrics = ["braycurtis", "HMOM"]#, "HEOM"]
-    args.steps = 500
+    args.steps = 200
     # args.window = 1000
     # args.bias = 1
     # args.ignore_sensitive = True

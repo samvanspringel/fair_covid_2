@@ -534,7 +534,7 @@ class IndividualFairness(IndividualFairnessBase):
 
             for i in range(K):
                 for j in range(K):
-                    term = S[i] * 1 / h[i] + S[j] * 1 / h[j] + R[i] * 1 / h[i] + R[j] * 1 / h[j]
+                    term = S.iloc[i] * 1 / h.iloc[i] + S.iloc[j] * 1 / h.iloc[j] + R.iloc[i] * 1 / h.iloc[i] + R.iloc[j] * 1 / h.iloc[j]
 
                     fairness += C_diff[:, i, j] * term
 
@@ -565,7 +565,7 @@ class IndividualFairness(IndividualFairnessBase):
                     if i != j:
                         n += 1
                         distance_reductions = get_distance_reduction(reduction_impact, i, j)
-                        fairness += np.abs(h[i] - h[j]) - distance_reductions
+                        fairness += np.abs(h.iloc[i] - h.iloc[j]) - distance_reductions
 
             fairness_window += -1 + (fairness/n)
         # print("FAIRNESS WINDOW ABFTA: ", fairness_window)

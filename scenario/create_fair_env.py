@@ -285,7 +285,7 @@ def create_fairness_framework_env(args):
     if args.vsc == 1:
         result_dir = VSC_SAVE_DIR
     else:
-        result_dir = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid/fairRLresults"
+        result_dir = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/experiments/results"
     is_job_hiring = False
 
     env_type = args.env
@@ -370,8 +370,8 @@ def create_fairness_framework_env(args):
     _num_group_notions = (len(sensitive_attribute) if args.combined_sensitive_attributes >= 2 else 1) * len(
         all_group_notions)
     _num_notions = _num_group_notions + len(all_individual_notions)
-    max_reward = args.episode_length * 1
-    scale = np.array([1] + [1] * _num_notions)  # TODO: treatment equality scale+max
+    # max_reward = args.episode_length * 1
+    # scale = np.array([1] + [1] * _num_notions)  # TODO: treatment equality scale+max
     # ref_point = np.array([-max_reward] + [-args.episode_length] * _num_notions)
     # scaling_factor = torch.tensor([[1.0] + ([1] * _num_notions) + [0.1]]).to(device)
     # max_return = np.array([max_reward] + [0] * _num_notions) / scale
@@ -385,7 +385,7 @@ def create_fairness_framework_env(args):
 
     model = create_covid_model(args, nA, scaling_factor, ss, se, sa, with_budget)
     env.nA = nA
-    env.scale = scale
+    env.scale = env.env.scale
     env.action_space = env.env.action_space
 
     return env, model, logdir, ref_point, scaling_factor, max_return
