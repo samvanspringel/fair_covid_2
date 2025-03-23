@@ -420,7 +420,7 @@ if __name__ == '__main__':
                         help='max size (in episodes) of the ER buffer')
     parser.add_argument('--threshold', default=0.02, type=float, help='crowding distance threshold before penalty')
     parser.add_argument('--noise', default=0.0, type=float, help='noise applied on target-return on batch-update')
-    parser.add_argument('--model', default='densesmall', type=str, help='dense(big|small)')
+    parser.add_argument('--model', default='conv1dbig', type=str, help='dense(big|small)')
 
     args = parser.parse_args()
     no_save = False
@@ -473,12 +473,6 @@ if __name__ == '__main__':
 
     env, model, logdir, ref_point, scaling_factor, max_return = create_fairness_framework_env(args)
     print(args)
-
-    import wandb
-
-    wandb.login(key='d013457b05ccb7e9b3c54f86806d3bd4c7f2384a')
-
-    wandb.init(project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
 
 
     # from cProfile import Profile

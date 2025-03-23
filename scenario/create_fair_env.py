@@ -389,6 +389,12 @@ def create_fairness_framework_env(args):
     env.scale = env.env.scale
     env.action_space = env.env.action_space
 
+    import wandb
+
+    wandb.login(key='d013457b05ccb7e9b3c54f86806d3bd4c7f2384a')
+
+    wandb.init(project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
+
     return env, model, logdir, ref_point, scaling_factor, max_return
 
 
