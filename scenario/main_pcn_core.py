@@ -14,6 +14,7 @@ from fairness.fairness_framework import ExtendedfMDP
 from loggers.logger import AgentLogger, LeavesLogger, TrainingPCNLogger, EvalLogger, DiscountHistoryLogger
 from scenario.fraud_detection.env import NUM_FRAUD_FEATURES
 from scenario.job_hiring.env import NUM_JOB_HIRING_FEATURES
+import wandb
 
 
 def run_episode_fairness(env, model, desired_return, desired_horizon, max_return, agent_logger, discount_history_logger,
@@ -431,7 +432,7 @@ if __name__ == '__main__':
     # args.steps = 5000
     # args.window = 500
     # args.team_size = 100
-    # args.top_episodes = 10
+    args.top_episodes = 10
     # args.n_episodes = 15
     # args.er_size = 30
     # args.episode_length = args.team_size * 10
@@ -440,15 +441,15 @@ if __name__ == '__main__':
     # args.fraud_proportion = 0.20
     #
     # args.top_episodes = 15
-    # args.n_episodes = 15
+    args.n_episodes = 5
     # args.er_size = 200
-    # args.model_updates = 10
+    args.model_updates = 2
     #
     # args.objectives = ["R", "SP", "IF"]#, "IF", "IF"]
     # args.compute_objectives = ["EO"]
     # args.distance_metrics = ["HMOM"] * 2
     # args.distance_metrics = ["braycurtis", "HMOM"]#, "HEOM"]
-    # args.steps = 5000
+    args.steps = 500
     # args.window = 1000
     # args.bias = 1
     # args.ignore_sensitive = True
@@ -473,6 +474,11 @@ if __name__ == '__main__':
     env, model, logdir, ref_point, scaling_factor, max_return = create_fairness_framework_env(args)
     print(args)
 
+    import wandb
+
+    wandb.login(key='d013457b05ccb7e9b3c54f86806d3bd4c7f2384a')
+
+    wandb.init(project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
 
 
     # from cProfile import Profile

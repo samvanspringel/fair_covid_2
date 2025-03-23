@@ -25,7 +25,6 @@ from scenario.parameter_setup import VSC_SAVE_DIR, device
 from pcn_model import *
 from gym_covid import *
 
-
 #
 Reward = "Reward"
 Reward_ARI = "Reward_ARI"
@@ -234,7 +233,6 @@ def create_fair_covid_env(args):
     max_return = np.array([0, 0, 0, 0, 0, 0]) / scale
     # max_return = np.array([0, -8000, 0, 0, 0, 0])/scale
     # keep only a selection of objectives
-    logdir = args.log_dir
 
     if args.action == 'discrete':
         env = gym.make(f'BECovidWithLockdown{env_type}Discrete-v0')
@@ -264,13 +262,13 @@ def create_fair_covid_env(args):
         raise ValueError(f'unknown model type: {args.model}')
 
 
-    return env, logdir, ref_point, scaling_factor, max_return, ss, se, sa, nA, with_budget
+    return env, ref_point, scaling_factor, max_return, ss, se, sa, nA, with_budget
 
 
 def create_covid_model(args, nA, scaling_factor, ss, se, sa, with_budget):
     with_budget = args.budget is not None
     model = CovidModel(nA, scaling_factor, tuple(args.objectives), ss, se, sa, with_budget=with_budget).to(device)
-
+    args.action = 'continuous'
     if args.action == 'discrete':
         model = DiscreteHead(model)
     elif args.action == 'multidiscrete':
@@ -295,7 +293,7 @@ def create_fairness_framework_env(args):
         args.window = None
 
     if env_type == "covid":
-        env, logdir, ref_point, scaling_factor, max_return, ss, se, sa, nA, with_budget = create_fair_covid_env(args)
+        env, ref_point, scaling_factor, max_return, ss, se, sa, nA, with_budget = create_fair_covid_env(args)
     # Job hiring
     # if is_job_hiring:
     #     logdir = f"{result_dir}/job_hiring/"
@@ -306,8 +304,9 @@ def create_fairness_framework_env(args):
     #     env, sensitive_attribute, inn_sensitive_features = create_fraud_env(args)
 
     #
-    logdir += args.log_dir + "/"
+    logdir = f"{result_dir}/covid/{args.log_dir}"
     logdir += datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S/')
+    print("LOGGING DIRECTORY:", logdir)
     os.makedirs(logdir, exist_ok=True)
 
     seed = args.seed

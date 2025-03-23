@@ -531,7 +531,7 @@ def train_fair_covid(env,
         desired_return, desired_horizon = choose_commands(experience_replay, n_er_episodes, objectives)
 
         # get all leaves, contain biggest elements, experience_replay got heapified in choose_commands
-        leaves = np.array([(len(e[2]), e[2][0].reward) for e in experience_replay[len(experience_replay) // 2:]])
+        leaves = [(len(e[2]), e[2][0].reward) for e in experience_replay[len(experience_replay) // 2:]]
         e_lengths, e_returns = zip(*leaves)
         e_lengths, e_returns = np.array(e_lengths), np.array(e_returns)
         try:
