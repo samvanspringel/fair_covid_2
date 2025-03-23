@@ -1,0 +1,6 @@
+- fill in covid-scm-momdp/data/contact_matrix/README
+	-> add some info on this in the overleaf
+- what about the population numbers (EUROSTAT), which one to use
+- Some seeds result in errors:
+	e.g.: python3 scenarios/run.py scenarios/s1.csv --runs 100 --seed 22122021
+	-> prolly because of neg values, checked with Lander
