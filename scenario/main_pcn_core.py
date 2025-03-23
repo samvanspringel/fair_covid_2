@@ -407,16 +407,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PCN-Fair', formatter_class=argparse.RawDescriptionHelpFormatter,
                                      parents=[fMDP_parser])
     parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
-    parser.add_argument('--steps', default=1e5, type=float, help='total timesteps')
+    parser.add_argument('--steps', default=3e5, type=float, help='total timesteps')
     parser.add_argument('--batch', default=256, type=int, help='batch size')
-    parser.add_argument('--model-updates', default=20, type=int,
+    parser.add_argument('--model-updates', default=50, type=int,
                         help='number of times the model is updated at every training iteration')
-    parser.add_argument('--top-episodes', default=50, type=int,
+    parser.add_argument('--top-episodes', default=200, type=int,
                         help='top-n episodes used to compute target-return and horizon. '
                              'Initially fill ER with n random episodes')
     parser.add_argument('--n-episodes', default=10, type=int,
                         help='number of episodes to run between each training iteration')
-    parser.add_argument('--er-size', default=100, type=int,
+    parser.add_argument('--er-size', default=1000, type=int,
                         help='max size (in episodes) of the ER buffer')
     parser.add_argument('--threshold', default=0.02, type=float, help='crowding distance threshold before penalty')
     parser.add_argument('--noise', default=0.0, type=float, help='noise applied on target-return on batch-update')
