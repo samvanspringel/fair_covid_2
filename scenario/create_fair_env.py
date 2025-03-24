@@ -218,7 +218,6 @@ def create_fair_covid_env(args):
 
     args.env = "ode"
     env_type = 'ODE' if args.env == 'ode' else 'Binomial'
-    n_evaluations = 1 if env_type == 'ODE' else 10
     args.budget = 5
     args.action = 'cont'
     args.model = 'conv1dbig'

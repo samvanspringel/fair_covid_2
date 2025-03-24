@@ -472,7 +472,10 @@ if __name__ == '__main__':
     n_evaluations = 10
 
     env, model, logdir, ref_point, scaling_factor, max_return = create_fairness_framework_env(args)
-    print(args)
+    if args.env == 'ODE' or args.env == 'ode':
+        n_evaluations = 1
+    else:
+        n_evaluations = 10
 
 
     # from cProfile import Profile

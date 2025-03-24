@@ -484,6 +484,7 @@ def train_fair_covid(env,
                      n_evaluations=10,
                      clip_grad_norm=None,
                      logdir='runs/'):
+    print("N EVALUATIONS: ", n_evaluations)
     step = 0
     if objectives == None:
         objectives = tuple([i for i in range(len(ref_point))])
