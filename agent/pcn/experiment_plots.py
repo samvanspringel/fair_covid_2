@@ -234,6 +234,8 @@ if __name__ == '__main__':
         help='get all best points across all selected runs, and save them to file')
     args = parser.parse_args()
 
+    print(args.algo)
+    print(args.logs)
     assert len(args.algo) == len(args.logs), 'each log should refer to an algo'
     all_runs = {}
     for algo, logdir in zip(args.algo, args.logs):
