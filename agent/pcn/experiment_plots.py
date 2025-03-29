@@ -227,12 +227,16 @@ if __name__ == '__main__':
      - RA 0324
     """)
 
+
     parser = argparse.ArgumentParser(description='plots')
     parser.add_argument('--logs', required=True, type=str, nargs='+')
     parser.add_argument('--algo', required=True, type=str, nargs='+', help='udrl, mones or ra')
     parser.add_argument('--save-pf', type=str, default=None, 
         help='get all best points across all selected runs, and save them to file')
     args = parser.parse_args()
+
+    #args.algo = "udrl"
+    #args.logs = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/experiments/results/cluster/steps_300000/objectives_R_ARH:R_SB_W:R_SB_S:R_SB_L_SBS:ABFTA/distance_metric_none/seed_0/6obj_3days_crashed"
 
     print(args.algo)
     print(args.logs)

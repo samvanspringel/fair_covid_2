@@ -14,8 +14,8 @@ scale = np.array([800000, 10000, 50., 20, 50, 100])
 ref_point = np.array([-15000000, -200000, -1000., -1000., -1000., -1000.]) / scale
 max_return = np.array([0, 0, 0, 0, 0, 0]) / scale
 
-MODEL_PATH = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/experiments/results/cluster/steps_300000/objectives_R_ARH:R_SB_W:R_SB_S:R_SB_L_SBS:ABFTA/distance_metric_none/seed_0/2025-03-23_22-21-13/model_1.pt"  # your single best model
-N_RUNS = 10000
+MODEL_PATH = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/experiments/results/cluster/steps_300000/objectives_R_ARH:R_SB_W:R_SB_S:R_SB_L_SBS:ABFTA/distance_metric_none/seed_0/6obj_3days_crashed/model_9.pt"  # your single best model
+N_RUNS = 100
 OUTPUT_CSV = "pareto_points_3.csv"
 
 import argparse
@@ -29,7 +29,7 @@ args = get_default_args()
 
 
 def run_policy_with_params(model, desired_return, desired_horizon):
-    env, ref_point, scaling_factor, max_return, ss, se, sa, nA, with_budget = create_fair_covid_env(args)
+    env, ref_point, scaling_factor, max_return, ss, se, sa, nA, with_budget = create_fair_covid_env(args, [0, 1, 2, 3, 4, 5])
     env.reset()
 
     done = False
@@ -114,6 +114,45 @@ def plot_pareto_points():
     plt.ylabel("Cumulative lost contacts")
     plt.title("Approx. Pareto front from model_10 with random desired_returns")
     plt.show()
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def plot_all_three():
+    plt.figure(figsize=(10, 7))
+
+    # Plot 4obj.csv
+    df_4 = pd.read_csv("4obj.csv")
+    x4 = df_4.iloc[:, 0]
+    y4 = df_4.iloc[:, 1] + df_4.iloc[:, 2] + df_4.iloc[:, 3]
+    plt.scatter(x4, y4, alpha=0.7, label="4obj", marker='o')
+
+    # Plot 6obj.csv
+    df_6 = pd.read_csv("6obj.csv")
+    x6 = df_6["o_1"]
+    y6 = df_6["o_5"]
+    plt.scatter(x6, y6, alpha=0.7, label="6obj", marker='s')
+
+    # Plot fixed.csv
+    df_fixed = pd.read_csv("fixed.csv")
+    x_fixed = df_fixed["o_0"]
+    y_fixed = df_fixed["o_1"]
+    plt.scatter(x_fixed, y_fixed, alpha=0.7, label="fixed", marker='^')
+
+    # Labels and legend
+    plt.xlabel("X-axis values")
+    plt.ylabel("Y-axis values")
+    plt.title("Scatter Plot of 4obj, 6obj, and fixed")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig("combined_plot.png")
+
 if __name__ == "__main__":
     #plot_pareto_points()
-    main()
+    plot_all_three()
+
+    #main()

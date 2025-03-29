@@ -237,10 +237,22 @@ def create_fair_covid_env(args, rewards_to_keep):
         budget = f'Budget{args.budget}'
     else:
         budget = ''
-    scale = np.array([10000, 50., 20, 50]) #np.array([800000, 10000, 50., 20, 50, 90])
-    ref_point = np.array([-200000, -1000.0, -1000.0, -1000.0]) / scale #np.array([-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0]) / scale
-    scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 0.1]]).to(device)
-    max_return = np.array([0, 0, 0, 0]) / scale #np.array([0, 0, 0, 0, 0, 0]) / scale
+
+    if len(rewards_to_keep) == 6:
+        scale = np.array([800000, 10000, 50., 20, 50, 90])
+        ref_point = np.array([-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0]) / scale
+        scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 0.1]]).to(device)
+        max_return = np.array([0, 0, 0, 0, 0, 0]) / scale
+    elif len(rewards_to_keep) == 5:
+        scale = np.array([10000, 50., 20, 50, 90])
+        ref_point = np.array([-200000, -1000.0, -1000.0, -1000.0, -1000.0]) / scale
+        scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 0.1]]).to(device)
+        max_return = np.array([0, 0, 0, 0, 0]) / scale
+    else:
+        scale = np.array([10000, 50., 20, 50]) #np.array([800000, 10000, 50., 20, 50, 90])
+        ref_point = np.array([-200000, -1000.0, -1000.0, -1000.0]) / scale #np.array([-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0]) / scale
+        scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 0.1]]).to(device)
+        max_return = np.array([0, 0, 0, 0]) / scale #np.array([0, 0, 0, 0, 0, 0]) / scale
     # max_return = np.array([0, -8000, 0, 0, 0, 0])/scale
     # keep only a selection of objectives
 
@@ -374,6 +386,8 @@ def create_fairness_framework_env(args):
     if args.no_window:
         args.window = None
 
+    print(rewards_to_keep)
+
     if env_type == "covid":
         env, ref_point, scaling_factor, max_return, ss, se, sa, nA, with_budget = \
             create_fair_covid_env(args, rewards_to_keep)
@@ -409,7 +423,7 @@ def create_fairness_framework_env(args):
 
 fMDP_parser = argparse.ArgumentParser(description='fMDP_parser', add_help=False)
 #
-fMDP_parser.add_argument('--objectives', default="R_ARH:R_SB_W:R_SB_S:R_SB_L",
+fMDP_parser.add_argument('--objectives', default="R_ARH:R_SB_W:R_SB_S:R_SB_L:R_SB_TOT",
                          type=str, nargs='+', help='Abbreviations of the fairness notions to optimise, one or more of: '
                                                    f'{parser_all_objectives}. Can be supplied as a single string, with'
                                                    f'the arguments separated by a colon, e.g., "R:SP"')
