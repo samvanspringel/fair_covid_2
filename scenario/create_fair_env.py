@@ -238,7 +238,12 @@ def create_fair_covid_env(args, rewards_to_keep):
     else:
         budget = ''
 
-    if len(rewards_to_keep) == 6:
+    if len(rewards_to_keep) == 2:
+        scale = np.array([10000, 100])
+        ref_point = np.array([-200000, -1000.0]) / scale
+        scaling_factor = torch.tensor([[1, 0.1]]).to(device)
+        max_return = np.array([0, 0]) / scale
+    elif len(rewards_to_keep) == 6:
         scale = np.array([800000, 10000, 50., 20, 50, 90])
         ref_point = np.array([-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0]) / scale
         scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 0.1]]).to(device)

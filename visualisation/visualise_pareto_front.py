@@ -125,18 +125,18 @@ def plot_all_three():
     plt.figure(figsize=(10, 7))
 
     # Plot 4obj.csv
-    df_4 = pd.read_csv("4obj.csv")
-    x4 = df_4.iloc[:, 0]
-    y4 = df_4.iloc[:, 1] + df_4.iloc[:, 2] + df_4.iloc[:, 3]
+    df_4 = pd.read_csv("test.csv")
+    x4 = df_4["o_0"]
+    y4 = df_4["o_4"]
     plt.scatter(x4, y4, alpha=0.7, label="4obj", marker='o')
 
-    # Plot 6obj.csv
-    df_6 = pd.read_csv("6obj.csv")
-    x6 = df_6["o_1"]
-    y6 = df_6["o_5"]
-    plt.scatter(x6, y6, alpha=0.7, label="6obj", marker='s')
-
-    # Plot fixed.csv
+    # # Plot 6obj.csv
+    # df_6 = pd.read_csv("6obj.csv")
+    # x6 = df_6["o_1"]
+    # y6 = df_6["o_5"]
+    # plt.scatter(x6, y6, alpha=0.7, label="6obj", marker='s')
+    #
+    # # Plot fixed.csv
     df_fixed = pd.read_csv("fixed.csv")
     x_fixed = df_fixed["o_0"]
     y_fixed = df_fixed["o_1"]
