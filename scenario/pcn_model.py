@@ -59,8 +59,9 @@ class TodayWrapper(gym.Wrapper):
     def step(self, action):
         s, r, d, i = super(TodayWrapper, self).step(action)
         # sum all the social burden objectives together:
-        p_tot = r[2:].sum()
-        r = np.concatenate((r, p_tot[None]))
+        # TODO temp remove
+        #p_tot = r[2:].sum()
+        #r = np.concatenate((r, p_tot[None]))
         if len(s) == 4:
             sb, ss, se, sa = s
             s = (sb, ss[-1].T, se[-1], sa)

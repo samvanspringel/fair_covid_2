@@ -419,8 +419,8 @@ if __name__ == '__main__':
     parser.add_argument('--er-size', default=1000, type=int,
                         help='max size (in episodes) of the ER buffer')
     parser.add_argument('--threshold', default=0.02, type=float, help='crowding distance threshold before penalty')
-    parser.add_argument('--noise', default=0.0, type=float, help='noise applied on target-return on batch-update')
-    parser.add_argument('--model', default='conv1dbig', type=str, help='dense(big|small)')
+    parser.add_argument('--noise', default=0.05, type=float, help='noise applied on target-return on batch-update')
+    parser.add_argument('--model', default='densebig', type=str, help='dense(big|small)')
 
     args = parser.parse_args()
     no_save = False

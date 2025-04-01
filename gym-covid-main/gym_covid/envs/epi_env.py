@@ -84,6 +84,7 @@ class EpiEnv(gym.Env):
 
         # simulate for a whole week, sum the daily rewards
         r_ari = r_arh = r_sr = 0.
+        r_sr_test = 0.
         state_n = np.empty((self.days_per_timestep,) + self.observation_space.shape)
         event_n = np.zeros((self.days_per_timestep, 1), dtype=bool)
         for day in range(self.days_per_timestep):
@@ -142,7 +143,8 @@ class EpiEnv(gym.Env):
 
         # next-state , reward, terminal?, info
         # provide action as proxy for current SCM, impacts progression of epidemic
-        return (state_n, event_n, action.copy()), np.array([r_ari, r_arh, r_sr_w, r_sr_s, r_sr_l]), False, {}
+        # return (state_n, event_n, action.copy()), np.array([r_ari, r_arh, r_sr_w, r_sr_s, r_sr_l]), False, {}
+        return (state_n, event_n, action.copy()), np.array([r_arh, r_sr.sum()]), False, {}
 
 
     def similarity_metric(self, state1, state2):

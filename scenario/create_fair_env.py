@@ -230,7 +230,7 @@ def create_fair_covid_env(args, rewards_to_keep):
     env_type = 'ODE' if args.env == 'ode' else 'Binomial'
     args.budget = 5
     args.action = 'cont'
-    args.model = 'conv1dbig'
+    args.model = 'densebig'
     with_budget = False
     if args.budget is not None:
         with_budget = True
@@ -239,9 +239,9 @@ def create_fair_covid_env(args, rewards_to_keep):
         budget = ''
 
     if len(rewards_to_keep) == 2:
-        scale = np.array([10000, 100])
+        scale = np.array([10000, 90])
         ref_point = np.array([-200000, -1000.0]) / scale
-        scaling_factor = torch.tensor([[1, 0.1]]).to(device)
+        scaling_factor = torch.tensor([[1, 1]]).to(device)
         max_return = np.array([0, 0]) / scale
     elif len(rewards_to_keep) == 6:
         scale = np.array([800000, 10000, 50., 20, 50, 90])
@@ -273,10 +273,11 @@ def create_fair_covid_env(args, rewards_to_keep):
         else:
             nA = np.prod(env.action_space.shape)
     env = TodayWrapper(env)
-    env = RewardSlicing(env, reward_indices=rewards_to_keep)
+    #env = RewardSlicing(env, reward_indices=rewards_to_keep)
     env = ScaleRewardEnv(env, scale=scale)
 
     env.nA = nA
+    print("MODEL:", args.model)
 
     if args.model == 'conv1dbig':
         ss, se, sa = ss_emb['conv1d'], se_emb['big'], sa_emb['big']
@@ -421,7 +422,7 @@ def create_fairness_framework_env(args):
 
     wandb.login(key='d013457b05ccb7e9b3c54f86806d3bd4c7f2384a')
 
-    wandb.init(project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
+    wandb.init(group="10_runs", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
 
     return env, model, logdir, ref_point, scaling_factor, max_return
 

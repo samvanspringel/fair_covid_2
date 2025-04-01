@@ -125,9 +125,9 @@ def plot_all_three():
     plt.figure(figsize=(10, 7))
 
     # Plot 4obj.csv
-    df_4 = pd.read_csv("test.csv")
+    df_4 = pd.read_csv("2obj.csv")
     x4 = df_4["o_0"]
-    y4 = df_4["o_4"]
+    y4 = df_4["o_1"]
     plt.scatter(x4, y4, alpha=0.7, label="4obj", marker='o')
 
     # # Plot 6obj.csv
