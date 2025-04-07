@@ -507,4 +507,5 @@ if __name__ == '__main__':
     # pr.print_stats(sort="cumulative")
 
     t_end = time.time()
+    print(f"SBS min: {env.min} and max: {env.max} ")
     print(t_end - t_start, "seconds")

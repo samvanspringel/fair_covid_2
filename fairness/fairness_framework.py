@@ -85,6 +85,8 @@ class FairnessFramework(object):
                                                       steps)
 
         self.all_notions = self.group_notions + self.individual_notions
+        self.min = 0
+        self.max = 0
 
     def update_history(self, episode, t, entities):
         """Update the framework with a new observed tuple
@@ -186,6 +188,10 @@ class ExtendedfMDP(gym.Env):
                                                               self.fairness_framework.similarity_metric,
                                                               self.fairness_framework.alpha,
                                                               (distance_metric, metric))
+            if diff < self.min:
+                self.min = diff
+            if diff > self.max:
+                self.max = diff
             reward = np.append(reward, diff)
         self._t += 1
 
