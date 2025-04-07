@@ -520,26 +520,24 @@ class IndividualFairness(IndividualFairnessBase):
     def social_burden_score(self, history: History, threshold=None, similarity_metric=None,
                        alpha=None, distance_metric=("braycurtis", "braycurtis")):
         fairness_window = 0
+        fw = 0
         states, actions, true_actions, scores, rewards = history.get_history()
 
         for state_C_diff in states:
             state_df, C_diff = state_C_diff
-            S = state_df["S"]
-            R = state_df["R"]
-            h = state_df["h_risk"]
+            # Convert Series to NumPy arrays
+            S = state_df["S"].to_numpy()
+            R = state_df["R"].to_numpy()
+            h = state_df["h_risk"].to_numpy()
 
-            K = len(S)
 
-            fairness = np.zeros(C_diff.shape[0])  # for example
+            A = (S + R) / h
 
-            for i in range(K):
-                for j in range(K):
-                    term = S.iloc[i] * 1 / h.iloc[i] + S.iloc[j] * 1 / h.iloc[j] + R.iloc[i] * 1 / h.iloc[i] + R.iloc[j] * 1 / h.iloc[j]
+            term_matrix = A[:, None] + A[None, :]
 
-                    fairness += C_diff[:, i, j] * term
-
+            # Multiply each slice of C_diff by term_matrix and sum over i and j
+            fairness = np.sum(C_diff * term_matrix, axis=(1, 2))
             fairness_window += fairness.sum()
-        # print("FAIRNESS WINDOW: ", fairness_window)
 
         return (0, 0), fairness_window, (0, [], 0)
 

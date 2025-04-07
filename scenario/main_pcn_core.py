@@ -406,21 +406,24 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='PCN-Fair', formatter_class=argparse.RawDescriptionHelpFormatter,
                                      parents=[fMDP_parser])
+    parser.add_argument('--action', default='continuous', type=str, help='discrete, multidiscrete or continuous')
     parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
-    parser.add_argument('--steps', default=3e5, type=float, help='total timesteps')
+    parser.add_argument('--steps', default=5e5, type=float, help='total timesteps')
     parser.add_argument('--batch', default=256, type=int, help='batch size')
     parser.add_argument('--model-updates', default=50, type=int,
-                        help='number of times the model is updated at every training iteration')
+        help='number of times the model is updated at every training iteration')
     parser.add_argument('--top-episodes', default=200, type=int,
-                        help='top-n episodes used to compute target-return and horizon. '
-                             'Initially fill ER with n random episodes')
+        help='top-n episodes used to compute target-return and horizon. \
+              Initially fill ER with n random episodes')
     parser.add_argument('--n-episodes', default=10, type=int,
-                        help='number of episodes to run between each training iteration')
+        help='number of episodes to run between each training iteration')
     parser.add_argument('--er-size', default=1000, type=int,
-                        help='max size (in episodes) of the ER buffer')
+        help='max size (in episodes) of the ER buffer')
     parser.add_argument('--threshold', default=0.02, type=float, help='crowding distance threshold before penalty')
     parser.add_argument('--noise', default=0.05, type=float, help='noise applied on target-return on batch-update')
-    parser.add_argument('--model', default='densebig', type=str, help='dense(big|small)')
+    parser.add_argument('--model', default='densebig_silu', type=str, help='conv1d(big|small), dense(big|small)')
+    parser.add_argument('--clip_grad_norm', default=5, type=float, help='clip gradient norm during pcn update')
+    parser.add_argument('--budget', default=None, type=int, help='number of times each action is allowed to change')
 
     args = parser.parse_args()
     no_save = False

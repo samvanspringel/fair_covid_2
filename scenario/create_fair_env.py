@@ -9,6 +9,7 @@ import argparse
 from pytz import timezone
 
 import sys
+
 sys.path.append("./")  # for command-line execution to find the other packages (e.g. envs)
 
 from fairness import SensitiveAttribute, CombinedSensitiveAttribute
@@ -33,6 +34,8 @@ Reward_SB_W = "Reward_SB_W"
 Reward_SB_S = "Reward_SB_S"
 Reward_SB_L = "Reward_SB_L"
 Reward_SB_TOT = "Reward_SB_TOT"
+Reward_SBS = "Reward_SBS"
+Reward_ABFTA = "Reward_ABFTA"
 
 reward_indices = {
     Reward_ARI: 0,
@@ -43,7 +46,7 @@ reward_indices = {
     Reward_SB_TOT: 5
 }
 
-ALL_REWARDS = [Reward_ARI, Reward_ARH, Reward_SB_W, Reward_SB_S, Reward_SB_L, Reward_SB_TOT]
+ALL_REWARDS = [Reward_ARI, Reward_ARH, Reward_SB_W, Reward_SB_S, Reward_SB_L, Reward_SB_TOT, Reward_SBS, Reward_ABFTA]
 #
 ALL_OBJECTIVES = ALL_REWARDS + ALL_GROUP_NOTIONS + ALL_INDIVIDUAL_NOTIONS
 SORTED_OBJECTIVES = {o: i for i, o in enumerate(ALL_OBJECTIVES)}
@@ -223,26 +226,17 @@ def create_fraud_env(args):
     return env, sensitive_attribute, inn_sensitive_features
 
 
-def create_fair_covid_env(args, rewards_to_keep):
-    device = 'cpu'
-
-    args.env = "ode"
-    env_type = 'ODE' if args.env == 'ode' else 'Binomial'
-    args.budget = 5
-    args.action = 'cont'
-    args.model = 'densebig'
-    with_budget = False
-    if args.budget is not None:
-        with_budget = True
-        budget = f'Budget{args.budget}'
-    else:
-        budget = ''
-
+def get_scaling(rewards_to_keep):
     if len(rewards_to_keep) == 2:
         scale = np.array([10000, 90])
         ref_point = np.array([-200000, -1000.0]) / scale
         scaling_factor = torch.tensor([[1, 1]]).to(device)
         max_return = np.array([0, 0]) / scale
+    if len(rewards_to_keep) == 3:
+        scale = np.array([10000, 90, 90])
+        ref_point = np.array([-200000, -1000.0, -100.0]) / scale
+        scaling_factor = torch.tensor([[1, 1, 1]]).to(device)
+        max_return = np.array([0, 0, 0]) / scale
     elif len(rewards_to_keep) == 6:
         scale = np.array([800000, 10000, 50., 20, 50, 90])
         ref_point = np.array([-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0]) / scale
@@ -254,12 +248,31 @@ def create_fair_covid_env(args, rewards_to_keep):
         scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 0.1]]).to(device)
         max_return = np.array([0, 0, 0, 0, 0]) / scale
     else:
-        scale = np.array([10000, 50., 20, 50]) #np.array([800000, 10000, 50., 20, 50, 90])
-        ref_point = np.array([-200000, -1000.0, -1000.0, -1000.0]) / scale #np.array([-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0]) / scale
+        scale = np.array([10000, 50., 20, 50])  # np.array([800000, 10000, 50., 20, 50, 90])
+        ref_point = np.array([-200000, -1000.0, -1000.0,
+                              -1000.0]) / scale  # np.array([-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0]) / scale
         scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 0.1]]).to(device)
-        max_return = np.array([0, 0, 0, 0]) / scale #np.array([0, 0, 0, 0, 0, 0]) / scale
-    # max_return = np.array([0, -8000, 0, 0, 0, 0])/scale
-    # keep only a selection of objectives
+        max_return = np.array([0, 0, 0, 0]) / scale  # np.array([0, 0, 0, 0, 0, 0]) / scale
+
+    return scale, ref_point, scaling_factor, max_return
+
+
+def create_fair_covid_env(args, rewards_to_keep):
+    device = 'cpu'
+
+    args.env = "ode"
+    env_type = 'ODE' if args.env == 'ode' else 'Binomial'
+    args.action = 'cont'
+    args.model = 'densebig'
+    with_budget = False
+    if args.budget is not None:
+        with_budget = True
+        budget = f'Budget{args.budget}'
+    else:
+        budget = ''
+
+    scale, ref_point, scaling_factor, max_return = get_scaling(rewards_to_keep)
+    print(f"SF: {scaling_factor}")
 
     if args.action == 'discrete':
         env = gym.make(f'BECovidWithLockdown{env_type}Discrete-v0')
@@ -273,8 +286,7 @@ def create_fair_covid_env(args, rewards_to_keep):
         else:
             nA = np.prod(env.action_space.shape)
     env = TodayWrapper(env)
-    #env = RewardSlicing(env, reward_indices=rewards_to_keep)
-    env = ScaleRewardEnv(env, scale=scale)
+    # env = RewardSlicing(env, reward_indices=rewards_to_keep)
 
     env.nA = nA
     print("MODEL:", args.model)
@@ -290,13 +302,13 @@ def create_fair_covid_env(args, rewards_to_keep):
     else:
         raise ValueError(f'unknown model type: {args.model}')
 
-
-    return env, ref_point, scaling_factor, max_return, ss, se, sa, nA, with_budget
+    return env, scale, ref_point, scaling_factor, max_return, ss, se, sa, nA, with_budget
 
 
 def create_covid_model(args, nA, scaling_factor, ss, se, sa, with_budget):
     with_budget = args.budget is not None
-    model = CovidModel(nA, scaling_factor, tuple(args.objectives), ss, se, sa, with_budget=with_budget).to(device)
+    # model = CovidModel(nA, scaling_factor, tuple(args.objectives), ss, se, sa, with_budget=with_budget).to(device)
+    model = CovidModel(nA, scaling_factor, (0, 1, 2), ss, se, sa, with_budget=with_budget).to(device)
     args.action = 'continuous'
     if args.action == 'discrete':
         model = DiscreteHead(model)
@@ -354,13 +366,15 @@ def create_fairness_framework_env(args):
     ordered_objectives = sorted(all_args_objectives,
                                 key=lambda o: SORTED_OBJECTIVES[get_objective(OBJECTIVES_MAPPING[o])])
     args.objectives = [i for i, o in enumerate(ordered_objectives) if o in args.objectives]
+
     # Check for concatenated distance metrics
     ind_notions = [n for n in all_args_objectives if isinstance(get_objective(OBJECTIVES_MAPPING[n]), IndividualNotion)]
     if len(args.distance_metrics) == 1:
         if _sep in args.distance_metrics[0]:
             args.distance_metrics = args.distance_metrics[0].split(_sep)
             dist_metrics = [(n, d) for n, d in zip(ind_notions, args.distance_metrics)]
-            dist_metrics = sorted(dist_metrics, key=lambda x: SORTED_OBJECTIVES[get_objective(OBJECTIVES_MAPPING[x[0]])])
+            dist_metrics = sorted(dist_metrics,
+                                  key=lambda x: SORTED_OBJECTIVES[get_objective(OBJECTIVES_MAPPING[x[0]])])
             args.distance_metrics = [d for (n, d) in dist_metrics]
         else:
             args.distance_metrics = args.distance_metrics * len(ind_notions)
@@ -372,14 +386,14 @@ def create_fairness_framework_env(args):
     fairness_framework = FairnessFramework([a for a in HiringActions], sensitive_attribute,
                                            individual_notions=all_individual_notions,
                                            group_notions=all_group_notions,
-                                           similarity_metric=None,#env.similarity_metric,
+                                           similarity_metric=None,  # env.similarity_metric,
                                            distance_metrics=args.distance_metrics,
                                            alpha=args.fair_alpha,
                                            window=args.window,
                                            discount_factor=args.discount_factor if args.discount_history else None,
                                            discount_threshold=args.discount_threshold if args.discount_history else None,
                                            discount_delay=args.discount_delay if args.discount_history else None,
-                                           min_window=args.min_window  if args.discount_history else None,
+                                           min_window=args.min_window if args.discount_history else None,
                                            nearest_neighbours=args.nearest_neighbours,
                                            inn_sensitive_features=None,
                                            # inn_sensitive_features=[HiringFeature.gender.value],  # TODO
@@ -392,16 +406,15 @@ def create_fairness_framework_env(args):
     if args.no_window:
         args.window = None
 
-    print(rewards_to_keep)
-
     if env_type == "covid":
-        env, ref_point, scaling_factor, max_return, ss, se, sa, nA, with_budget = \
-            create_fair_covid_env(args, rewards_to_keep)
+        env, scale, ref_point, scaling_factor, max_return, ss, se, sa, nA, with_budget = \
+            create_fair_covid_env(args, args.objectives)
 
     print("Environment: ", env)
 
     # Extend the environment with fairness framework
     env = ExtendedfMDP(env, fairness_framework)
+    env = ScaleRewardEnv(env, scale=scale)
 
     # TODO: max reward still ok with new metrics/group divisions
     _num_group_notions = (len(sensitive_attribute) if args.combined_sensitive_attributes >= 2 else 1) * len(
@@ -415,8 +428,13 @@ def create_fairness_framework_env(args):
 
     model = create_covid_model(args, nA, scaling_factor, ss, se, sa, with_budget)
     env.nA = nA
-    env.scale = env.env.scale
-    env.action_space = env.env.action_space
+    env.scale = env.scale
+    env.action_space = env.env.env.action_space
+
+    print(f"Objectives: {args.objectives}")
+    print(f"Individual notions: {all_individual_notions}")
+    print(f"Scaling: {scaling_factor}")
+    print(f"Budget: {args.budget}")
 
     import wandb
 
@@ -433,7 +451,7 @@ fMDP_parser.add_argument('--objectives', default="R_ARH:R_SB_W:R_SB_S:R_SB_L:R_S
                          type=str, nargs='+', help='Abbreviations of the fairness notions to optimise, one or more of: '
                                                    f'{parser_all_objectives}. Can be supplied as a single string, with'
                                                    f'the arguments separated by a colon, e.g., "R:SP"')
-fMDP_parser.add_argument('--compute_objectives', default=['EO', 'OAE', 'PP', 'IF', 'CSC'],
+fMDP_parser.add_argument('--compute_objectives', default=[],
                          type=str, nargs='*', help='Abbreviations of the fairness notions to compute, '
                                                    f'in addition to the ones being optimised: {parser_all_objectives}'
                                                    f' Can be supplied as a single string, with the arguments separated '

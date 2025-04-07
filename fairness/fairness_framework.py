@@ -8,6 +8,7 @@ from fairness.individual import IndividualNotion, TIMESTEP_INDIVIDUAL_NOTIONS
 from fairness.individual.individual_fairness import IndividualFairness
 from scenario import CombinedState
 import gym
+import numpy as np
 
 
 class FairnessFramework(object):
@@ -185,7 +186,7 @@ class ExtendedfMDP(gym.Env):
                                                               self.fairness_framework.similarity_metric,
                                                               self.fairness_framework.alpha,
                                                               (distance_metric, metric))
-            #reward.append(diff)
+            reward = np.append(reward, diff)
         self._t += 1
 
         return next_state, reward, done, info

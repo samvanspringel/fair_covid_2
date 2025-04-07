@@ -37,6 +37,9 @@ class ScaleRewardEnv(gym.RewardWrapper):
         self.scale = scale
 
     def reward(self, reward):
+        print("reward", reward)
+        print("min", self.min)
+        print("scale", self.scale)
         return (reward - self.min) / self.scale
 
 
@@ -58,6 +61,7 @@ class TodayWrapper(gym.Wrapper):
     # also discard first reward
     def step(self, action):
         s, r, d, i = super(TodayWrapper, self).step(action)
+        print("Reward:", r)
         # sum all the social burden objectives together:
         # TODO temp remove
         #p_tot = r[2:].sum()

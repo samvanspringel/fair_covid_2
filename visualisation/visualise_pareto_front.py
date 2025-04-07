@@ -125,10 +125,10 @@ def plot_all_three():
     plt.figure(figsize=(10, 7))
 
     # Plot 4obj.csv
-    df_4 = pd.read_csv("2obj.csv")
+    df_4 = pd.read_csv("best_cov.csv")
     x4 = df_4["o_0"]
     y4 = df_4["o_1"]
-    plt.scatter(x4, y4, alpha=0.7, label="4obj", marker='o')
+    plt.scatter(x4, y4, alpha=0.7, label="best hypervolume", marker='o')
 
     # # Plot 6obj.csv
     # df_6 = pd.read_csv("6obj.csv")
@@ -145,7 +145,7 @@ def plot_all_three():
     # Labels and legend
     plt.xlabel("X-axis values")
     plt.ylabel("Y-axis values")
-    plt.title("Scatter Plot of 4obj, 6obj, and fixed")
+    plt.title("Scatter Plot fixed vs donkey")
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
