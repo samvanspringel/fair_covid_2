@@ -352,6 +352,8 @@ def create_fairness_framework_env(args):
     # Check for concatenated arguments for objectives and compute objectives
     _sep = ":"
 
+    string_obj = args.objectives
+
     if len(args.objectives) == 1 and _sep in args.objectives[0]:
         args.objectives = args.objectives[0].split(_sep)
     if len(args.compute_objectives) == 1 and _sep in args.compute_objectives[0]:
@@ -440,7 +442,7 @@ def create_fairness_framework_env(args):
 
     wandb.login(key='d013457b05ccb7e9b3c54f86806d3bd4c7f2384a')
 
-    wandb.init(group="sbs_added_ref_point", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
+    wandb.init(group=f"runs_fairness_{string_obj}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
 
     return env, model, logdir, ref_point, scaling_factor, max_return
 
