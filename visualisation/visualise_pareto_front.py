@@ -125,7 +125,7 @@ def plot_all_three():
     plt.figure(figsize=(10, 7))
 
     # Plot 4obj.csv
-    df_4 = pd.read_csv("best_cov.csv")
+    df_4 = pd.read_csv("worst.csv")
     x4 = df_4["o_0"]
     y4 = df_4["o_1"]
     plt.scatter(x4, y4, alpha=0.7, label="best hypervolume", marker='o')
