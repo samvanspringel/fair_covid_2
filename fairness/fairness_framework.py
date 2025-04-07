@@ -134,8 +134,6 @@ class ExtendedfMDP(gym.Env):
         #
         self._t = -1
         self._episode = -1
-        self.min = 0
-        self.max = 0
 
         # Objective names
         self.obj_names = ["reward"]
@@ -188,10 +186,6 @@ class ExtendedfMDP(gym.Env):
                                                               self.fairness_framework.similarity_metric,
                                                               self.fairness_framework.alpha,
                                                               (distance_metric, metric))
-            if diff < self.min:
-                self.min = diff
-            if diff > self.max:
-                self.max = diff
             reward = np.append(reward, diff)
         self._t += 1
 

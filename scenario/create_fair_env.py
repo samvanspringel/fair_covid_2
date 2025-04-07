@@ -233,8 +233,8 @@ def get_scaling(rewards_to_keep):
         scaling_factor = torch.tensor([[1, 1]]).to(device)
         max_return = np.array([0, 0]) / scale
     if len(rewards_to_keep) == 3:
-        scale = np.array([10000, 90, 90])
-        ref_point = np.array([-200000, -1000.0, -100.0]) / scale
+        scale = np.array([10000, 90, 4e6])
+        ref_point = np.array([-200000, -1000.0, -80e6]) / scale
         scaling_factor = torch.tensor([[1, 1, 1]]).to(device)
         max_return = np.array([0, 0, 0]) / scale
     elif len(rewards_to_keep) == 6:
@@ -438,9 +438,9 @@ def create_fairness_framework_env(args):
 
     import wandb
 
-    wandb.login(key='d013457b05ccb7e9b3c54f86806d3bd4c7f2384a')
+    #wandb.login(key='d013457b05ccb7e9b3c54f86806d3bd4c7f2384a')
 
-    wandb.init(group="sbs_added", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
+    #wandb.init(group="sbs_added", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
 
     return env, model, logdir, ref_point, scaling_factor, max_return
 

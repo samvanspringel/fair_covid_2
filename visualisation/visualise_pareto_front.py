@@ -121,38 +121,36 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def plot_all_three():
+def plot_pareto_fronts():
+    csv_files = ["sbs.csv", "sbs1.csv", "sbs2.csv", "sbs3.csv"]
+
     plt.figure(figsize=(10, 7))
 
-    # Plot 4obj.csv
-    df_4 = pd.read_csv("worst.csv")
-    x4 = df_4["o_0"]
-    y4 = df_4["o_1"]
-    plt.scatter(x4, y4, alpha=0.7, label="best hypervolume", marker='o')
-
-    # # Plot 6obj.csv
-    # df_6 = pd.read_csv("6obj.csv")
-    # x6 = df_6["o_1"]
-    # y6 = df_6["o_5"]
-    # plt.scatter(x6, y6, alpha=0.7, label="6obj", marker='s')
-    #
-    # # Plot fixed.csv
+    # Plot the fixed data
     df_fixed = pd.read_csv("fixed.csv")
     x_fixed = df_fixed["o_0"]
     y_fixed = df_fixed["o_1"]
-    plt.scatter(x_fixed, y_fixed, alpha=0.7, label="fixed", marker='^')
+    plt.scatter(x_fixed, y_fixed, s=5, alpha=0.7, label="fixed", marker='o')
 
-    # Labels and legend
+    # Plot each CSV in a loop
+    for csv_file in csv_files:
+        df = pd.read_csv(csv_file)
+        x = df["o_0"]
+        y = df["o_1"]
+        print(df["o_2"].min())
+        plt.scatter(x, y, s=5, alpha=0.7, label=csv_file, marker='o')
+
+    plt.ylim(-2000, 0)  # Adjust as needed
     plt.xlabel("X-axis values")
     plt.ylabel("Y-axis values")
-    plt.title("Scatter Plot fixed vs donkey")
+    plt.title("Scatter Plot with Small Markers")
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig("combined_plot.png")
+    plt.savefig("pareto_fronts.png")
 
 if __name__ == "__main__":
     #plot_pareto_points()
-    plot_all_three()
+    plot_pareto_fronts()
 
     #main()
