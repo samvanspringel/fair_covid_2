@@ -122,8 +122,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 def plot_pareto_fronts():
-    csv_files = ["sbs.csv", "sbs1.csv", "sbs2.csv", "sbs3.csv"]
-
+    csv_files = ["sbs.csv", "sbs1.csv", "sbs2.csv", "sbs3.csv", "sbs4.csv"]
+    #csv_files = ["abfta.csv"]
     plt.figure(figsize=(10, 7))
 
     # Plot the fixed data
