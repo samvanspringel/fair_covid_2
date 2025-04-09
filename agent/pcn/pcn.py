@@ -162,10 +162,7 @@ def add_episode(transitions, experience_replay, gamma=1., max_size=100, step=0):
 
 def choose_action(model, obs, desired_return, desired_horizon, eval=False):
     # if observation is not a simple np.array, convert individual arrays to tensors
-    #obs = [torch.tensor([o]).to(device) for o in obs] if type(obs) == tuple else torch.tensor([obs]).to(device)
-    # Fix for warning
-    obs = [torch.tensor([bool(o)]).to(device) for o in obs] if isinstance(obs, tuple) else torch.tensor([bool(obs)]).to(
-        device)
+    obs = [torch.tensor([o]).to(device) for o in obs] if type(obs) == tuple else torch.tensor([obs]).to(device)
     log_probs = model(obs,
                       torch.tensor([desired_return]).to(device),
                       torch.tensor([desired_horizon]).unsqueeze(1).to(device))
