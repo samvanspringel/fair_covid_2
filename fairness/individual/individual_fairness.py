@@ -78,26 +78,16 @@ def _pool_weakly_meritocratic(args):
 
     return i, is_fair, max_diff
 
+
 def get_reduction_impact(C_diff):
-    areas, age_groups, _ = C_diff.shape
-
-    reduction_matrix = np.zeros((age_groups, areas))
-
-    for area in range(areas):
-        for age_group in range(age_groups):
-            reduction_age_group_area = C_diff[area, age_group, :]
-            overall_reduction_age_group = np.sum(reduction_age_group_area)
-
-            reduction_matrix[age_group, area] = overall_reduction_age_group
-
-    return reduction_matrix
+    return np.sum(C_diff, axis=2).T
 
 
 def get_distance_reduction(reduction_matrix, i, j):
     epsilon = 1e-12
 
-    normalized_reduction_i = reduction_matrix[i]/np.sum(reduction_matrix[i])
-    normalized_reduction_j = reduction_matrix[j]/np.sum(reduction_matrix[j])
+    normalized_reduction_i = reduction_matrix[i] / np.sum(reduction_matrix[i])
+    normalized_reduction_j = reduction_matrix[j] / np.sum(reduction_matrix[j])
 
     normalized_reduction_i_safe = np.clip(normalized_reduction_i, epsilon, None)
     normalized_reduction_j_safe = np.clip(normalized_reduction_j, epsilon, None)
@@ -315,7 +305,8 @@ class IndividualFairness(IndividualFairnessBase):
 
     def weakly_meritocratic(self, history: History, threshold=None, similarity_metric=None, alpha=0,
                             distance_metric=(
-                            "braycurtis", "braycurtis")):  # TODO: update with new history, with distance metric=> KNN?
+                                    "braycurtis",
+                                    "braycurtis")):  # TODO: update with new history, with distance metric=> KNN?
         """Never prefer one action over another if the long-term (discounted) reward of
         choosing the latter action is higher
         """
@@ -413,7 +404,8 @@ class IndividualFairness(IndividualFairnessBase):
             # Use distances already calculated and stored from individual fairness notion
             #   (d, j, diff, actions[i], actions[j])
             if is_t:
-                nearest = [deq.n_smallest for _, deq in self._individual_last_window[distance_metric][n-history.newly_added:n]]
+                nearest = [deq.n_smallest for _, deq in
+                           self._individual_last_window[distance_metric][n - history.newly_added:n]]
             else:
                 nearest = [deq.n_smallest for _, deq in self._individual_last_window[distance_metric]]
             try:
@@ -516,9 +508,8 @@ class IndividualFairness(IndividualFairnessBase):
 
         return (exact, approx), diff, (unsatisfied, [], difference_per_ind)
 
-
     def social_burden_score(self, history: History, threshold=None, similarity_metric=None,
-                       alpha=None, distance_metric=("braycurtis", "braycurtis")):
+                            alpha=None, distance_metric=("braycurtis", "braycurtis")):
         fairness_window = 0
         fw = 0
         states, actions, true_actions, scores, rewards = history.get_history()
@@ -529,7 +520,6 @@ class IndividualFairness(IndividualFairnessBase):
             S = state_df["S"].to_numpy()
             R = state_df["R"].to_numpy()
             h = state_df["h_risk"].to_numpy()
-
 
             A = (S + R) / h
 
@@ -542,29 +532,26 @@ class IndividualFairness(IndividualFairnessBase):
         return (0, 0), fairness_window, (0, [], 0)
 
     def age_based_fairness_through_unawareness(self, history: History, threshold=None, similarity_metric=None,
-                       alpha=None, distance_metric=("braycurtis", "braycurtis")):
+                                               alpha=None, distance_metric=("braycurtis", "braycurtis")):
 
         fairness_window = 0
         states, actions, true_actions, scores, rewards = history.get_history()
 
-        for state_C_diff in states:
-            state_df, C_diff = state_C_diff
-
+        for state_df, C_diff in states:
             reduction_impact = get_reduction_impact(C_diff)
-
-            h = state_df["h_risk"]
-
-            K = len(h)
+            hospitalization_risks = state_df["h_risk"].values
+            K = len(hospitalization_risks)
 
             fairness = 0
             n = 0
             for i in range(K):
-                for j in range(K):
-                    if i != j:
-                        n += 1
-                        distance_reductions = get_distance_reduction(reduction_impact, i, j)
-                        fairness += np.abs(h.iloc[i] - h.iloc[j]) - distance_reductions
+                for j in range(i + 1, K):
+                    distance_reductions = get_distance_reduction(reduction_impact, i, j)
+                    diff = np.abs(hospitalization_risks[i] - hospitalization_risks[j]) - distance_reductions
+                    fairness += diff
+                    n += 1
 
-            fairness_window += -1 + (fairness/n)
-        # print("FAIRNESS WINDOW ABFTA: ", fairness_window)
+            if n > 0:
+                fairness_window += -1 + (fairness / n)
+
         return (0, 0), fairness_window, (0, [], 0)
