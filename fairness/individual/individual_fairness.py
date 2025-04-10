@@ -86,8 +86,17 @@ def get_reduction_impact(C_diff):
 def get_distance_reduction(reduction_matrix, i, j):
     epsilon = 1e-12
 
-    normalized_reduction_i = reduction_matrix[i] / np.sum(reduction_matrix[i])
-    normalized_reduction_j = reduction_matrix[j] / np.sum(reduction_matrix[j])
+    reduction_i = np.sum(reduction_matrix[i])
+    if reduction_i < epsilon:
+        normalized_reduction_i = np.full_like(reduction_matrix[i], 1.0 / len(reduction_matrix[i]))
+    else:
+        normalized_reduction_i = reduction_matrix[i] / reduction_i
+
+    reduction_j = np.sum(reduction_matrix[j])
+    if reduction_j < epsilon:
+        normalized_reduction_j = np.full_like(reduction_matrix[j], 1.0 / len(reduction_matrix[j]))
+    else:
+        normalized_reduction_j = reduction_matrix[j] / reduction_j
 
     normalized_reduction_i_safe = np.clip(normalized_reduction_i, epsilon, None)
     normalized_reduction_j_safe = np.clip(normalized_reduction_j, epsilon, None)
