@@ -444,7 +444,6 @@ def create_fairness_framework_env(args):
     print(f"Individual notions: {all_individual_notions}")
     print(f"Scaling: {scaling_factor}")
     print(f"Budget: {args.budget}")
-    exit(1)
 
     import wandb
 

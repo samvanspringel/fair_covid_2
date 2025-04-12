@@ -8,115 +8,9 @@ from agent.pcn.pcn import choose_action
 from scenario.create_fair_env import *
 from scenario.pcn_model import *
 
-# -------------------------------
-# Keep your scaling parameters:
-scale = np.array([800000, 10000, 50., 20, 50, 100])
-ref_point = np.array([-15000000, -200000, -1000., -1000., -1000., -1000.]) / scale
-max_return = np.array([0, 0, 0, 0, 0, 0]) / scale
 
 MODEL_PATH = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/experiments/results/cluster/steps_300000/objectives_R_ARH:R_SB_W:R_SB_S:R_SB_L_SBS:ABFTA/distance_metric_none/seed_0/6obj_3days_crashed/model_9.pt"  # your single best model
-N_RUNS = 100
-OUTPUT_CSV = "pareto_points_3.csv"
 
-import argparse
-
-def get_default_args():
-    parser = argparse.ArgumentParser()
-    from scenario.create_fair_env import fMDP_parser
-    return fMDP_parser.parse_args([])  # ← this gives you the default args
-
-args = get_default_args()
-
-
-def run_policy_with_params(model, desired_return, desired_horizon):
-    env, ref_point, scaling_factor, max_return, ss, se, sa, nA, with_budget = create_fair_covid_env(args, [0, 1, 2, 3, 4, 5])
-    env.reset()
-
-    done = False
-    totalHosp = 0.0
-    totalLostContacts = 0.0
-
-    while not done:
-        state_df, C_diff_6x10x10 = env.state_df()
-
-        # sum daily new hospital admissions
-        daily_hosp = state_df["I_hosp_new"].sum() if "I_hosp_new" in state_df else 0.0
-        totalHosp += daily_hosp
-
-        # sum lost contacts from the 6x10x10 matrix
-        if C_diff_6x10x10 is not None:
-            totalLostContacts += env.lost_contacts.sum()
-
-        budget = np.ones(3) * 4
-        action_so_far = env.current_action
-        events = env.current_events_n
-        state = env.current_state_n
-
-
-        action = choose_action(
-            model,
-            (budget, state, events, action_so_far),
-            desired_return,
-            desired_horizon,
-            eval=True
-        )
-
-        _, _, done, info = env.step(action)
-
-    return totalHosp, totalLostContacts
-
-
-def main():
-    # load your single best model
-    model = torch.load(MODEL_PATH, weights_only=False)
-    model.eval()
-
-    rows = []
-    returns = pd.read_csv("wandb_export_2025-03-24T13_35_19.075+01_00.csv")
-
-    for i in range(min(N_RUNS, len(returns))):
-        row = returns.iloc[i].values.astype(np.float32)
-        desired_return = row  # shape: (num_objectives,) #np.array(returns[i]).astype(np.float32)
-        desired_return = np.random.uniform(low=np.array([0, 0, 0, 0, 0, 0]), high=scale).astype(np.float32)
-        # Also vary horizon if you want
-        desired_horizon = 15 #np.random.randint(1, 12)  # e.g. random in [1..12]
-
-        hosp, lostC = run_policy_with_params(model, desired_return, desired_horizon)
-        rows.append({
-            "desired_return": desired_return.tolist(),
-            "desired_horizon": float(desired_horizon),
-            "totalHosp": hosp,
-            "totalLostContacts": lostC,
-        })
-
-    df = pd.DataFrame(rows)
-    df.to_csv(OUTPUT_CSV, index=False)
-    print(f"Saved {len(df)} points to {OUTPUT_CSV}")
-
-    xvals = -df["totalHosp"] / 1e5
-    yvals = df["totalLostContacts"]  # might be negative, so it goes downward
-    xvals, yvals = np.array(xvals, yvals) * np.array([[10000], [100]])
-    plt.scatter(xvals, yvals, marker="o", color="blue")
-
-    plt.xlabel("Cumulative number of daily new hospitalizations ×10^5 (negated)")
-    plt.ylabel("Cumulative lost contacts")
-    plt.title("Approx. Pareto front from model_10 with random desired_returns")
-    plt.savefig("pareto_front.png")
-
-def plot_pareto_points():
-    df = pd.read_csv(OUTPUT_CSV)
-    xvals = df["totalHosp"] / 1e5
-    yvals = -df["totalLostContacts"]  # might be negative, so it goes downward
-    #xvals, yvals = np.array(xvals, yvals) * np.array([[10000], [100]])
-    plt.scatter(xvals, yvals, marker="o", color="blue")
-
-    plt.xlabel("Cumulative number of daily new hospitalizations ×10^5 (negated)")
-    plt.ylabel("Cumulative lost contacts")
-    plt.title("Approx. Pareto front from model_10 with random desired_returns")
-    plt.show()
-
-import matplotlib.pyplot as plt
-import pandas as pd
 
 def plot_pareto_fronts_sbs():
     csv_files = ["sbs.csv", "sbs1.csv", "sbs2.csv", "sbs3.csv", "sbs4.csv"]
@@ -176,7 +70,155 @@ def plot_pareto_fronts_abfta():
     plt.tight_layout()
     plt.savefig("pareto_front_abfta.png")
 
+
+device = "cpu"
+
+
+def run_episode(env, model, desired_return, desired_horizon, max_return, gamma=1.0):
+    """
+    Runs one episode in the environment using the model's actions.
+    Returns a list of Transition objects (obs, action, reward, next_obs, done).
+    """
+    transitions = []
+    obs = env.reset()
+    done = False
+
+    while not done:
+        action = choose_action(model, obs, desired_return, desired_horizon, eval=True)
+        next_obs, reward, done, _ = env.step(action)
+
+        transitions.append(
+            Transition(
+                observation=obs[0],
+                action=env.action(action),
+                reward=np.float32(reward).copy(),
+                next_observation=next_obs[0],
+                terminal=done
+            )
+        )
+        obs = next_obs
+
+        # Decrement the desired return by actual reward, clipping so it does not exceed max_return
+        desired_return = np.clip(desired_return - reward, None, max_return, dtype=np.float32)
+        # Keep desired horizon from going below 1
+        desired_horizon = np.float32(max(desired_horizon - 1, 1.0))
+
+    # Optionally, discount the rewards backward
+    for i in reversed(range(len(transitions) - 1)):
+        transitions[i].reward += gamma * transitions[i + 1].reward
+
+    return transitions
+
+
+def plot_episode(transitions):
+    """
+    Basic plotting function that mimics eval_pcn's style, focusing on typical Covid env states.
+    Adjust indices or subplots based on your environment's observation layout.
+    """
+    states = np.array([t.observation for t in transitions])
+    # Add the last next_observation
+    states = np.concatenate([states, transitions[-1].next_observation[None]], axis=0)
+
+    # Example indexes for hospital, ICU, deaths, etc.
+    # Adjust to match how your environment organizes states
+    i_hosp_new = states[..., -3].sum(axis=-1)
+    i_icu_new = states[..., -2].sum(axis=-1)
+    d_new = states[..., -1].sum(axis=-1)
+
+    actions = np.array([t.action for t in transitions])
+    actions = np.concatenate([actions, [actions[-1]]], axis=0)  # Just so the final step plots an action
+
+    # Three vertical plots
+    fig, axs = plt.subplots(3, 1, sharex=True, figsize=(8, 9))
+
+    # Hospital, ICU
+    axs[0].plot(i_hosp_new, label="hospital")
+    axs[0].plot(i_icu_new, label="icu")
+    axs[0].legend()
+    axs[0].set_ylabel("Hosp / ICU")
+
+    # Deaths
+    axs[1].plot(d_new, label="deaths", color="red")
+    axs[1].legend()
+    axs[1].set_ylabel("Deaths")
+
+    # Actions
+    axs[2].plot(actions[:, 0], label="action_0")
+    if actions.shape[1] > 1:
+        axs[2].plot(actions[:, 1], label="action_1")
+    if actions.shape[1] > 2:
+        axs[2].plot(actions[:, 2], label="action_2")
+    axs[2].legend()
+    axs[2].set_ylabel("Actions")
+    axs[2].set_xlabel("Timesteps")
+
+    plt.tight_layout()
+    plt.show()
+
+
+def evaluate_model():
+    """
+    Evaluate an existing PCN model without parsing CLI arguments.
+    Customize any default arguments here as needed.
+    """
+
+    # ------------------------------------------------------------------
+    # 2) Hardcode defaults for environment creation
+    #    (Mirrors typical usage from create_fair_covid_env)
+    # ------------------------------------------------------------------
+    class SimpleArgs:
+        # For the Covid environment
+        env = "covid"
+        seed = 0
+        model = "densebig"  # used by create_fair_covid_env to pick the net shape
+        action = "continuous"  # continuous or discrete
+        budget = None  # if you want to enforce a budget, set an integer
+        episode_length = 100
+        bias = 0
+        ignore_sensitive = False
+        # ... add other fields from create_fair_env if needed ...
+
+    args = SimpleArgs()
+
+    # Specify which reward indices we want to keep (like in your usage):
+    # E.g. if the environment uses 5D or 6D rewards, pick a subset
+    # For example, if you want [0,1,2,3,4]
+    rewards_to_keep = [0, 1, 2, 3, 4]
+
+    # Create env
+    env, scale, ref_point, scaling_factor, max_return_array, ss, se, sa, nA, with_budget = create_fair_covid_env(
+        args, rewards_to_keep
+    )
+    print("Environment created:", env)
+
+    # ------------------------------------------------------------------
+    # 3) Load your existing, trained PCN model
+    #    Adjust the path to your .pt file as needed
+    # ------------------------------------------------------------------
+    loaded_model_path = "path/to/my_trained_model.pt"
+    model = torch.load(loaded_model_path, map_location=device)
+    model.eval()
+
+    # ------------------------------------------------------------------
+    # 4) Evaluate the model
+    #    We'll define some default desired_return and horizon
+    #    You can pick any target returns or run multiple episodes
+    # ------------------------------------------------------------------
+    desired_return = np.array([0, 0, 0, 0, 0], dtype=np.float32)  # shape matches your reward dimension
+    desired_horizon = 17  # e.g. if you want to plan for 30 steps
+    max_return = np.array(max_return_array, dtype=np.float32)
+
+    # Number of episodes
+    n_episodes = 2
+    for i in range(n_episodes):
+        transitions = run_episode(env, model, desired_return.copy(), desired_horizon, max_return, gamma=1.0)
+        print(f"\nEpisode {i + 1}: final discounted returns = {transitions[0].reward}")
+        # Plot results from the episode
+        plot_episode(transitions)
+
+
+
 if __name__ == "__main__":
-    #plot_pareto_points()
-    plot_pareto_fronts_sbs()
-    plot_pareto_fronts_abfta()
+    #plot_pareto_fronts_sbs()
+    #plot_pareto_fronts_abfta()
+    evaluate_model()
