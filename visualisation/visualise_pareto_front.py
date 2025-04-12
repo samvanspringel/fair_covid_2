@@ -115,42 +115,68 @@ def plot_pareto_points():
     plt.title("Approx. Pareto front from model_10 with random desired_returns")
     plt.show()
 
-import pandas as pd
 import matplotlib.pyplot as plt
-
 import pandas as pd
-import matplotlib.pyplot as plt
 
-def plot_pareto_fronts():
+def plot_pareto_fronts_sbs():
     csv_files = ["sbs.csv", "sbs1.csv", "sbs2.csv", "sbs3.csv", "sbs4.csv"]
-    #csv_files = ["abfta.csv"]
-    plt.figure(figsize=(10, 7))
+    fig, axs = plt.subplots(2, 1, figsize=(10, 14))
 
-    # Plot the fixed data
     df_fixed = pd.read_csv("fixed.csv")
-    x_fixed = df_fixed["o_0"]
-    y_fixed = df_fixed["o_1"]
-    plt.scatter(x_fixed, y_fixed, s=5, alpha=0.7, label="fixed", marker='o')
+    axs[0].scatter(df_fixed["o_0"], df_fixed["o_1"], s=5, alpha=0.7, label="fixed", marker='o')
 
-    # Plot each CSV in a loop
     for csv_file in csv_files:
         df = pd.read_csv(csv_file)
-        x = df["o_0"]
-        y = df["o_1"]
         print(df["o_2"].min())
-        plt.scatter(x, y, s=5, alpha=0.7, label=csv_file, marker='o')
+        axs[0].scatter(df["o_0"], df["o_1"], s=5, alpha=0.7, label=csv_file, marker='o')
+        axs[1].scatter(df["o_0"], df["o_2"], s=5, alpha=0.7, label=csv_file, marker='o')
 
-    plt.ylim(-2000, 0)  # Adjust as needed
-    plt.xlabel("X-axis values")
-    plt.ylabel("Y-axis values")
-    plt.title("Scatter Plot with Small Markers")
-    plt.legend()
-    plt.grid(True)
+    axs[0].set_ylim(-2000, 0)
+    axs[0].set_xlabel("Hospitalizations")
+    axs[0].set_ylabel("Social burden")
+    axs[0].set_title("Pareto Front: Hospitalizations vs Social Burden")
+    axs[0].legend()
+    axs[0].grid(True)
+
+    axs[1].set_xlabel("Hospitalizations")
+    axs[1].set_ylabel("Social burden score")
+    axs[1].set_title("Pareto Front: Hospitalizations vs Social Burden Score")
+    axs[1].legend()
+    axs[1].grid(True)
+
     plt.tight_layout()
-    plt.savefig("pareto_fronts.png")
+    plt.savefig("pareto_front_sbs.png")
+
+def plot_pareto_fronts_abfta():
+    csv_files = ["abfta.csv", "abfta1.csv", "abfta2.csv", "abfta3.csv", "abfta4.csv"]
+    fig, axs = plt.subplots(2, 1, figsize=(10, 14))
+
+    df_fixed = pd.read_csv("fixed.csv")
+    axs[0].scatter(df_fixed["o_0"], df_fixed["o_1"], s=5, alpha=0.7, label="fixed", marker='o')
+
+    for csv_file in csv_files:
+        df = pd.read_csv(csv_file)
+        print(df["o_2"].min())
+        axs[0].scatter(df["o_0"], df["o_1"], s=5, alpha=0.7, label=csv_file, marker='o')
+        axs[1].scatter(df["o_0"], df["o_2"], s=5, alpha=0.7, label=csv_file, marker='o')
+
+    axs[0].set_ylim(-2000, 0)
+    axs[0].set_xlabel("Hospitalizations")
+    axs[0].set_ylabel("Social burden")
+    axs[0].set_title("Pareto Front: Hospitalizations vs Social Burden")
+    axs[0].legend()
+    axs[0].grid(True)
+
+    axs[1].set_xlabel("Hospitalizations")
+    axs[1].set_ylabel("Age-based fairness (ABFTA)")
+    axs[1].set_title("Pareto Front: Hospitalizations vs Age-Based Fairness")
+    axs[1].legend()
+    axs[1].grid(True)
+
+    plt.tight_layout()
+    plt.savefig("pareto_front_abfta.png")
 
 if __name__ == "__main__":
     #plot_pareto_points()
-    plot_pareto_fronts()
-
-    #main()
+    plot_pareto_fronts_sbs()
+    plot_pareto_fronts_abfta()

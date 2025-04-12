@@ -237,6 +237,13 @@ def get_scaling(rewards_to_keep):
         ref_point = np.array([-200000, -1000.0, -80e6]) / scale
         scaling_factor = torch.tensor([[1, 1, 1]]).to(device)
         max_return = np.array([0, 0, 0]) / scale
+
+    if len(rewards_to_keep) == 4:
+        scale = np.array([10000, 90, 170, 4e6])
+        ref_point = np.array([-200000, -1000.0, -3400, -80e6]) / scale
+        scaling_factor = torch.tensor([[1, 1, 1, 1]]).to(device)
+        max_return = np.array([0, 0, 0, 0]) / scale
+
     elif len(rewards_to_keep) == 6:
         scale = np.array([800000, 10000, 50., 20, 50, 90])
         ref_point = np.array([-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0]) / scale
@@ -437,6 +444,7 @@ def create_fairness_framework_env(args):
     print(f"Individual notions: {all_individual_notions}")
     print(f"Scaling: {scaling_factor}")
     print(f"Budget: {args.budget}")
+    exit(1)
 
     import wandb
 
