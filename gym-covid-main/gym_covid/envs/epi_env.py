@@ -84,7 +84,7 @@ class EpiEnv(gym.Env):
 
         # simulate for a whole week, sum the daily rewards
         r_ari = r_arh = r_sr = 0.
-        r_sr_test = 0.
+        r_sr_per_age = 0.
         state_n = np.empty((self.days_per_timestep,) + self.observation_space.shape)
         event_n = np.zeros((self.days_per_timestep, 1), dtype=bool)
         for day in range(self.days_per_timestep):
@@ -121,6 +121,14 @@ class EpiEnv(gym.Env):
             C_diff = C_asym-C_full
             # divide by total population to get lost contacts/person, for each social environment
             r_sr += (C_diff*S_s_n[None,i]*S_s_n[None,j] + C_diff*R_s_n[None,i]*R_s_n[None,j]).sum(axis=(1,2))/self.N
+
+            # Compute the lost contacts for all age groups combined (as before):
+            lost_matrix = (C_diff * S_s_n[None, i] * S_s_n[None, j]) + (C_diff * R_s_n[None, i] * R_s_n[None, j])
+
+            # Also compute a new array storing these lost contacts by age group i.
+            # We sum over environment dimension (axis=0) and the j dimension (axis=2), leaving i as axis=1.
+            r_sr_per_age += lost_matrix.sum(axis=(0, 2)) / self.N
+
             # update state
             s = s_n
 
@@ -144,7 +152,7 @@ class EpiEnv(gym.Env):
         # next-state , reward, terminal?, info
         # provide action as proxy for current SCM, impacts progression of epidemic
         # return (state_n, event_n, action.copy()), np.array([r_ari, r_arh, r_sr_w, r_sr_s, r_sr_l]), False, {}
-        return (state_n, event_n, action.copy()), np.array([r_arh, r_sr.sum()]), False, {}
+        return (state_n, event_n, action.copy()), np.array([r_arh, r_sr.sum()]), False, {"lost_contacts_per_age": r_sr_per_age}
 
 
     def similarity_metric(self, state1, state2):

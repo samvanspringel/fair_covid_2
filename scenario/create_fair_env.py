@@ -232,13 +232,13 @@ def get_scaling(rewards_to_keep):
         ref_point = np.array([-200000, -1000.0]) / scale
         scaling_factor = torch.tensor([[1, 1]]).to(device)
         max_return = np.array([0, 0]) / scale
-    if len(rewards_to_keep) == 3:
+    elif len(rewards_to_keep) == 3:
         scale = np.array([10000, 90, 4e6])
         ref_point = np.array([-200000, -1000.0, -80e6]) / scale
         scaling_factor = torch.tensor([[1, 1, 1]]).to(device)
         max_return = np.array([0, 0, 0]) / scale
 
-    if len(rewards_to_keep) == 4:
+    elif len(rewards_to_keep) == 4:
         scale = np.array([10000, 90, 170, 4e6])
         ref_point = np.array([-200000, -1000.0, -3400, -80e6]) / scale
         scaling_factor = torch.tensor([[1, 1, 1, 1]]).to(device)
@@ -272,11 +272,11 @@ def create_fair_covid_env(args, rewards_to_keep):
     args.action = 'cont'
     args.model = 'densebig'
     with_budget = False
-    if args.budget is not None:
+    if args.budget == 0:
+        budget = ''
+    else:
         with_budget = True
         budget = f'Budget{args.budget}'
-    else:
-        budget = ''
 
     scale, ref_point, scaling_factor, max_return = get_scaling(rewards_to_keep)
     print(f"SF: {scaling_factor}")
@@ -296,6 +296,7 @@ def create_fair_covid_env(args, rewards_to_keep):
     # env = RewardSlicing(env, reward_indices=rewards_to_keep)
 
     env.nA = nA
+    env.scale = scale
     print("MODEL:", args.model)
 
     if args.model == 'conv1dbig':
@@ -315,7 +316,7 @@ def create_fair_covid_env(args, rewards_to_keep):
 def create_covid_model(args, nA, scaling_factor, ss, se, sa, with_budget):
     with_budget = args.budget is not None
     # model = CovidModel(nA, scaling_factor, tuple(args.objectives), ss, se, sa, with_budget=with_budget).to(device)
-    model = CovidModel(nA, scaling_factor, (0, 1, 2), ss, se, sa, with_budget=with_budget).to(device)
+    model = CovidModel(nA, scaling_factor, (0, 1), ss, se, sa, with_budget=with_budget).to(device)
     args.action = 'continuous'
     if args.action == 'discrete':
         model = DiscreteHead(model)
@@ -371,7 +372,10 @@ def create_fairness_framework_env(args):
 
     rewards_to_keep = [reward_indices[r] for r in chosen_rewards]
 
-    all_args_objectives = args.objectives + args.compute_objectives
+    if args.compute_objectives:
+        all_args_objectives = args.objectives + args.compute_objectives
+    else:
+        all_args_objectives = args.objectives
     ordered_objectives = sorted(all_args_objectives,
                                 key=lambda o: SORTED_OBJECTIVES[get_objective(OBJECTIVES_MAPPING[o])])
     args.objectives = [i for i, o in enumerate(ordered_objectives) if o in args.objectives]
@@ -449,7 +453,7 @@ def create_fairness_framework_env(args):
 
     wandb.login(key='d013457b05ccb7e9b3c54f86806d3bd4c7f2384a')
 
-    wandb.init(group=f"runs_fairness_{string_obj}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
+    wandb.init(group=f"runs_fairness_{string_obj}_budget:{args.budget}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
 
     return env, model, logdir, ref_point, scaling_factor, max_return
 

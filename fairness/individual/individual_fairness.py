@@ -520,7 +520,6 @@ class IndividualFairness(IndividualFairnessBase):
     def social_burden_score(self, history: History, threshold=None, similarity_metric=None,
                             alpha=None, distance_metric=("braycurtis", "braycurtis")):
         fairness_window = 0
-        fw = 0
         states, actions, true_actions, scores, rewards = history.get_history()
 
         for state_C_diff in states:
