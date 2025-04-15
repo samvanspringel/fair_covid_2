@@ -233,17 +233,17 @@ def get_scaling(rewards_to_keep, fairness_notions):
             if fn == IndividualNotion.SocialBurdenScore:
                 scale = np.array([10000, 4e6])
                 ref_point = np.array([-200000, -80e6]) / scale
-                scaling_factor = torch.tensor([[1, 1]]).to(device)
+                scaling_factor = torch.tensor([[1, 1, 0.1]]).to(device)
                 max_return = np.array([0, 0]) / scale
             elif fn == IndividualNotion.AgeBasedFairnessThroughUnawareness:
                 scale = np.array([10000, 170])
                 ref_point = np.array([-200000, -3400]) / scale
-                scaling_factor = torch.tensor([[1, 1]]).to(device)
+                scaling_factor = torch.tensor([[1, 1, 0.1]]).to(device)
                 max_return = np.array([0, 0]) / scale
         else:
             scale = np.array([10000, 100])
             ref_point = np.array([-200000, -1000.0]) / scale
-            scaling_factor = torch.tensor([[1, 1]]).to(device)
+            scaling_factor = torch.tensor([[1, 1, 0.1]]).to(device)
             max_return = np.array([0, 0]) / scale
     elif len(rewards_to_keep) == 3:
         scale = np.array([10000, 100, 4e6])
@@ -460,7 +460,6 @@ def create_fairness_framework_env(args):
     print(f"Individual notions: {all_individual_notions}")
     print(f"Scaling: {scaling_factor}")
     print(f"Budget: {args.budget}")
-    exit(1)
 
     import wandb
 
