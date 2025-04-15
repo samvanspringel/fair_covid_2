@@ -241,7 +241,7 @@ def get_scaling(rewards_to_keep, fairness_notions):
                 scaling_factor = torch.tensor([[1, 1, 0.1]]).to(device)
                 max_return = np.array([0, 0]) / scale
         else:
-            scale = np.array([10000, 100])
+            scale = np.array([10000, 90])
             ref_point = np.array([-200000, -1000.0]) / scale
             scaling_factor = torch.tensor([[1, 1, 0.1]]).to(device)
             max_return = np.array([0, 0]) / scale
