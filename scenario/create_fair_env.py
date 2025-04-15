@@ -325,7 +325,7 @@ def create_fair_covid_env(args, rewards_to_keep, fairness_notions):
 
 
 def create_covid_model(args, nA, scaling_factor, ss, se, sa, with_budget):
-    with_budget = args.budget is not None
+    with_budget = args.budget is not 0
     # model = CovidModel(nA, scaling_factor, tuple(args.objectives), ss, se, sa, with_budget=with_budget).to(device)
     model = CovidModel(nA, scaling_factor, tuple(args.objectives), ss, se, sa, with_budget=with_budget).to(device)
     args.action = 'continuous'
