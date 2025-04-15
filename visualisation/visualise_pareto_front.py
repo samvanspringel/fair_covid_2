@@ -1,14 +1,22 @@
-import torch
-import numpy as np
-import pandas as pd
-
-import matplotlib.pyplot as plt
-import os
-
+from pathlib import Path
 from agent.pcn.pcn import choose_action
 from scenario.create_fair_env import *
 from scenario.pcn_model import *
 from fairness.individual.individual_fairness import *
+
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+import datetime
+import pandas as pd
+import h5py
+import pathlib
+
+# Same imports as eval_pcn, except we replace the environment creation
+# with your create_fair_env (create_fair_covid_env).
+# Adjust paths as needed:
+from scenario.create_fair_env import create_fair_covid_env
+from agent.pcn.pcn import non_dominated, Transition, choose_action, epsilon_metric
 
 age_groups = {
     0: "0-10",
@@ -25,80 +33,140 @@ age_groups = {
 
 MODEL_PATH = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/experiments/results/cluster/steps_300000/objectives_R_ARH:R_SB_W:R_SB_S:R_SB_L_SBS:ABFTA/ref_results/seed_0/6obj_3days_crashed/model_9.pt"  # your single best model
 
-import h5py
-from agent.pcn.pcn import non_dominated
-from pathlib import Path
+
+def interpolate_runs(runs, w=100):
+    all_steps = np.array(sorted(np.unique(np.concatenate([r[:,0] for r in runs]))))
+    all_values = np.stack([np.interp(all_steps, r[:,0], r[:,1]) for r in runs], axis=0)
+    return all_steps, all_values
 
 def load_runs_from_logdir(logdir):
+    """
+    Recursively finds all 'log.h5' files in logdir, loads the final
+    Pareto front from each, and returns a list of dicts (each has 'pareto_front').
+    """
     logdir_path = Path(logdir)
     runs = []
-
     for path in logdir_path.rglob('log.h5'):
         with h5py.File(path, 'r') as logfile:
             pf = logfile['train/leaves/ndarray']
-            pareto_front = pf[-1]
-            run = {
-                'pareto_front': pareto_front
-            }
-            runs.append(run)
-
+            pareto_front = pf[-1]  # final front
+            runs.append({'pareto_front': pareto_front})
     return runs
 
+def plot_pareto_front_from_dir(logdir, budget_label, scale_x=10000, scale_y=100, save=True):
+    """
+    1) Loads Pareto‐front data from `logdir`.
+    2) Removes duplicates and sorts each front by objective‐0 (assumed x).
+    3) Interpolates across runs (seeds).
+    4) Plots the mean ± std fill for the coverage set.
+    5) Optionally saves the figure as 'NCS_ref_interp_budget_{budget_label}.png'.
 
-def plot_pareto_fronts_ref():
-    runs = load_runs_from_logdir("/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/agent/pcn/ref_results")
-    # Each run is a dict with a final 'pareto_front' array.
-    # We'll gather all runs' fronts, then interpolate.
+    Returns (x_vals_scaled, mean_curve, std_curve) so we can re‐plot or combine.
+    """
+    # 1) Load all runs
+    runs = load_runs_from_logdir(logdir)
 
-    # 1) Collect final PF from each run, sort them by first dimension
+    # 2) Sort each run’s front by the first objective
     sorted_runs = []
     for run in runs:
         pf = run['pareto_front']
-        # remove duplicates
         pf = np.unique(pf, axis=0)
-        # sort by the first objective so we can treat it like (x,y)
-        pf = pf[np.argsort(pf[:,0])]
+        pf = non_dominated(pf)
+        pf = pf[np.argsort(pf[:, 0])]       # sort by first dimension (objective 0)
         sorted_runs.append(pf)
 
-    def interpolate_2d_pareto(runs_2d):
-        # runs_2d is a list of arrays, each shape (N_i, 2)
-        # gather all x-values
-        all_x = np.concatenate([r[:,0] for r in runs_2d])
-        all_steps = np.unique(all_x)
-        # for each run, interpolate y-values at all_steps
-        all_values = []
-        for r_2d in runs_2d:
-            x, y = r_2d[:,0], r_2d[:,1]
-            y_interp = np.interp(all_steps, x, y)
-            all_values.append(y_interp)
-        all_values = np.stack(all_values, axis=0)  # shape: (num_runs, len(all_steps))
-        return all_steps, all_values
+    # If no runs found, just return None
+    if not sorted_runs:
+        print(f"No runs found for {logdir}")
+        return None, None, None
 
-    # 3) Interpolate across seeds
-    x_vals, y_vals = interpolate_2d_pareto(sorted_runs)
+    for pf in sorted_runs:
+        # scale
+        x_vals_scaled = pf[:, 0] * scale_x
+        y_vals_scaled = pf[:, 1] * scale_y
+        plt.plot(x_vals_scaled, y_vals_scaled, alpha=0.7)
 
-    # 4) Scale and compute statistics
-    # original code scaled x by 10000, y by 100
-    x_vals_scaled = x_vals * 10000
-    y_vals_scaled = y_vals * 100
+    plt.xlabel('Hospitalizations (scaled)')
+    plt.ylabel('Social Burden (scaled)')
+    plt.title(f'Coverage set (no interp) budget={budget_label}')
+    plt.tight_layout()
 
-    mean_curve = np.mean(y_vals_scaled, axis=0)
-    std_curve = np.std(y_vals_scaled, axis=0)
-
-    plt.figure()
-    plt.plot(x_vals_scaled, mean_curve, label='Mean coverage set (b=5)')
-    plt.fill_between(
-        x_vals_scaled,
-        mean_curve - std_curve,
-        mean_curve + std_curve,
-        alpha=0.2)
-
-    plt.xlabel('Hospitalizations (scaled by 1e4)')
-    plt.ylabel('Social Burden (scaled by 1e2)')
-    plt.title('Coverage set variation for different budgets b=5')
+    # # 3) Interpolate across seeds to get mean curve
+    # x_vals, y_vals = interpolate_runs(sorted_runs)
+    #
+    # # 4) Scale
+    # x_vals_scaled = x_vals * scale_x
+    # y_vals_scaled = y_vals * scale_y
+    #
+    # # Compute mean ± std
+    # mean_curve = np.mean(y_vals_scaled, axis=0)
+    # std_curve = np.std(y_vals_scaled, axis=0)
+    #
+    # # 5) Plot
+    # plt.figure()
+    # plt.plot(x_vals_scaled, mean_curve, label=f'Mean coverage set (b={budget_label})')
+    # plt.fill_between(
+    #     x_vals_scaled,
+    #     mean_curve - std_curve,
+    #     mean_curve + std_curve,
+    #     alpha=0.2
+    # )
+    plt.xlabel('Hospitalizations (scaled)')
+    plt.ylabel('Social Burden (scaled)')
+    plt.title(f'Coverage set variation (budget={budget_label})')
     plt.legend()
     plt.tight_layout()
-    plt.savefig("NCS_ref_interp.png")
+
+    if save:
+        outname = f"NCS_ref_interp_budget_{budget_label}.png"
+        plt.savefig(outname)
+        print(f"Saved {outname}")
+    else:
+        plt.show()
+
+    return x_vals_scaled, 0, 0
+
+def make_budget_plots():
+    # The top-level folder containing budget_{i} subdirs
+    BASELINE_DIR = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/agent/pcn/baseline_results"
+
+    # Suppose you have budgets 0..5:
+    #all_budgets = [0, 1, 2, 3, 4, 5]
+    all_budgets = [2, 3, 4, 5]
+    # We'll store the (x_vals, mean_curve, std_curve) in a dict
+    results_dict = {}
+
+    # Step A: Generate one figure per budget
+    for b in all_budgets:
+        subdir = os.path.join(BASELINE_DIR, f"budget_{b}")
+        x_vals_scaled, mean_curve, std_curve = plot_pareto_front_from_dir(
+            logdir=subdir,
+            budget_label=str(b),
+            scale_x=10000,
+            scale_y=100,
+            save=True
+        )
+        if x_vals_scaled is not None:
+            # Store for final combined plot
+            results_dict[b] = (x_vals_scaled, mean_curve, std_curve)
+
+    # Step B: Combine all budgets into one single figure
+    plt.figure()
+    for b, (x_vals_scaled, mean_curve, std_curve) in results_dict.items():
+        plt.plot(x_vals_scaled, mean_curve, label=f'Budget={b}')
+        plt.fill_between(
+            x_vals_scaled,
+            mean_curve - std_curve,
+            mean_curve + std_curve,
+            alpha=0.1
+        )
+    plt.xlabel('Hospitalizations (scaled)')
+    plt.ylabel('Social Burden (scaled)')
+    plt.title('Coverage set variation for multiple budgets')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("NCS_ref_interp_all_budgets.png")
+    print("Saved NCS_ref_interp_all_budgets.png")
     plt.show()
 
 def plot_pareto_fronts_sbs():
@@ -203,22 +271,6 @@ def plot_pareto_fronts_abfta():
     plt.tight_layout()
     plt.savefig("NCS_abfta.png")
 
-
-#!/usr/bin/env python3
-
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
-import datetime
-import pandas as pd
-import h5py
-import pathlib
-
-# Same imports as eval_pcn, except we replace the environment creation
-# with your create_fair_env (create_fair_covid_env).
-# Adjust paths as needed:
-from scenario.create_fair_env import create_fair_covid_env
-from agent.pcn.pcn import non_dominated, Transition, choose_action, epsilon_metric
 
 device = 'cpu'
 
@@ -524,7 +576,7 @@ def main():
 
 
 if __name__ == "__main__":
-    plot_pareto_fronts_ref()
+    make_budget_plots()
     # print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
     # plot_pareto_fronts_sbs()
     # print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")

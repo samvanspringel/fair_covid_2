@@ -226,14 +226,27 @@ def create_fraud_env(args):
     return env, sensitive_attribute, inn_sensitive_features
 
 
-def get_scaling(rewards_to_keep):
+def get_scaling(rewards_to_keep, fairness_notions):
     if len(rewards_to_keep) == 2:
-        scale = np.array([10000, 90])
-        ref_point = np.array([-200000, -1000.0]) / scale
-        scaling_factor = torch.tensor([[1, 1]]).to(device)
-        max_return = np.array([0, 0]) / scale
+        if len(fairness_notions) == 1:
+            fn = fairness_notions[0]
+            if fn == IndividualNotion.SocialBurdenScore:
+                scale = np.array([10000, 4e6])
+                ref_point = np.array([-200000, -80e6]) / scale
+                scaling_factor = torch.tensor([[1, 1]]).to(device)
+                max_return = np.array([0, 0]) / scale
+            elif fn == IndividualNotion.AgeBasedFairnessThroughUnawareness:
+                scale = np.array([10000, 170])
+                ref_point = np.array([-200000, -3400]) / scale
+                scaling_factor = torch.tensor([[1, 1]]).to(device)
+                max_return = np.array([0, 0]) / scale
+        else:
+            scale = np.array([10000, 100])
+            ref_point = np.array([-200000, -1000.0]) / scale
+            scaling_factor = torch.tensor([[1, 1]]).to(device)
+            max_return = np.array([0, 0]) / scale
     elif len(rewards_to_keep) == 3:
-        scale = np.array([10000, 90, 4e6])
+        scale = np.array([10000, 100, 4e6])
         ref_point = np.array([-200000, -1000.0, -80e6]) / scale
         scaling_factor = torch.tensor([[1, 1, 1]]).to(device)
         max_return = np.array([0, 0, 0]) / scale
@@ -264,9 +277,7 @@ def get_scaling(rewards_to_keep):
     return scale, ref_point, scaling_factor, max_return
 
 
-def create_fair_covid_env(args, rewards_to_keep):
-    device = 'cpu'
-
+def create_fair_covid_env(args, rewards_to_keep, fairness_notions):
     args.env = "ode"
     env_type = 'ODE' if args.env == 'ode' else 'Binomial'
     args.action = 'cont'
@@ -278,7 +289,7 @@ def create_fair_covid_env(args, rewards_to_keep):
         with_budget = True
         budget = f'Budget{args.budget}'
 
-    scale, ref_point, scaling_factor, max_return = get_scaling(rewards_to_keep)
+    scale, ref_point, scaling_factor, max_return = get_scaling(rewards_to_keep, fairness_notions)
     print(f"SF: {scaling_factor}")
 
     if args.action == 'discrete':
@@ -316,7 +327,7 @@ def create_fair_covid_env(args, rewards_to_keep):
 def create_covid_model(args, nA, scaling_factor, ss, se, sa, with_budget):
     with_budget = args.budget is not None
     # model = CovidModel(nA, scaling_factor, tuple(args.objectives), ss, se, sa, with_budget=with_budget).to(device)
-    model = CovidModel(nA, scaling_factor, (0, 1), ss, se, sa, with_budget=with_budget).to(device)
+    model = CovidModel(nA, scaling_factor, tuple(args.objectives), ss, se, sa, with_budget=with_budget).to(device)
     args.action = 'continuous'
     if args.action == 'discrete':
         model = DiscreteHead(model)
@@ -421,7 +432,7 @@ def create_fairness_framework_env(args):
 
     if env_type == "covid":
         env, scale, ref_point, scaling_factor, max_return, ss, se, sa, nA, with_budget = \
-            create_fair_covid_env(args, args.objectives)
+            create_fair_covid_env(args, args.objectives, all_individual_notions)
 
     print("Environment: ", env)
 
@@ -445,9 +456,11 @@ def create_fairness_framework_env(args):
     env.action_space = env.env.env.action_space
 
     print(f"Objectives: {args.objectives}")
+    print(f"Scale: {env.scale}")
     print(f"Individual notions: {all_individual_notions}")
     print(f"Scaling: {scaling_factor}")
     print(f"Budget: {args.budget}")
+    exit(1)
 
     import wandb
 
