@@ -6,14 +6,20 @@ from gym_covid import *
 from visualise_pareto_front import compute_sbs, compute_abfta
 
 
-def plot_coverage_set(file, measure):
-    # Read the CSV files
-    df_fixed = pd.read_csv(file)
+def plot_coverage_set(files, measure):
+    plt.figure(figsize=(8, 6))  # Create one figure
 
-    plt.figure(figsize=(8, 6))
-    plt.scatter(df_fixed["hospitalizations"], df_fixed["measure"],
-                label=f"Fixed Policies Measure {measure}", marker='o', color='blue')
-    plt.xlabel("Hospitalizations")
+    for file in files:
+        df_fixed = pd.read_csv(file)
+
+        # Check if mean of first column > 3000, and scale if needed
+        if df_fixed.iloc[:, 0].mean() < -3000:
+            df_fixed.iloc[:, 0] = df_fixed.iloc[:, 0] / 1
+
+        plt.scatter(df_fixed.iloc[:, 0], df_fixed.iloc[:, 1],
+                    label=f"{file}", marker='o')
+
+    plt.xlabel("Hospitalizations (possibly scaled by 1e4)")
     plt.ylabel(f"Measure {measure}")
     plt.title(f"Coverage Set Fixed Policies for Measure {measure}")
     plt.legend()
@@ -69,11 +75,12 @@ def generate_fixed_coverage_set(env, fairness, amount_of_policies=100):
 
 if __name__ == '__main__':
     y_measure = "ABFTA"
-    env = gym.make(f'BECovidWithLockdownODEContinuous-v0')
-    coverage_set = generate_fixed_coverage_set(env, y_measure, amount_of_policies=100)
-
-    # Create a DataFrame and save as a CSV file:
-    df = pd.DataFrame(coverage_set, columns=["hospitalizations", "measure"])
-    df.to_csv(f"fixed_{y_measure}.csv", index=False)
-    print("Saved fixed policies")
-    plot_coverage_set(f"fixed_{y_measure}.csv", y_measure)
+    # env = gym.make(f'BECovidWithLockdownODEContinuous-v0')
+    # coverage_set = generate_fixed_coverage_set(env, y_measure, amount_of_policies=100)
+    #
+    # # Create a DataFrame and save as a CSV file:
+    # df = pd.DataFrame(coverage_set, columns=["hospitalizations", "measure"])
+    # df.to_csv(f"fixed_{y_measure}.csv", index=False)
+    # print("Saved fixed policies")
+    #plot_coverage_set([f"fixed_{y_measure}.csv"], y_measure)
+    plot_coverage_set(["test.csv", "cs_fixed.csv"], y_measure)

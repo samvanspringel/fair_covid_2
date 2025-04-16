@@ -58,11 +58,11 @@ def plot_fixed_data():
     """
     Reads in fixed.csv (assumes two columns: x and y) and plots its data using plt.scatter.
     """
-    df_fixed = pd.read_csv("fixed.csv")
+    df_fixed = pd.read_csv("cs_fixed.csv")
     plt.scatter(df_fixed["o_0"], df_fixed["o_1"], s=5, alpha=0.7, label="fixed", marker='o')
 
 def plot_pareto_front_from_dir(logdir, budget_label, scale_x=10000, scale_y=90,
-                               save=True, use_interpolation=True, extreme_y_threshold=-20):
+                               save=False, use_interpolation=True, extreme_y_threshold=-20):
     """
     1) Loads Pareto‐front data from `logdir`.
     2) Removes duplicate points, computes the nondominated front, and filters out extreme y values (< extreme_y_threshold).
@@ -148,7 +148,7 @@ def plot_pareto_front_from_dir(logdir, budget_label, scale_x=10000, scale_y=90,
 def make_budget_plots():
     # The top-level folder containing budget_{i} subdirs
     BASELINE_DIR = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/agent/pcn/baseline_results"
-    plt.rcParams["figure.figsize"] = (15, 15)
+    plt.rcParams["figure.figsize"] = (17, 15)
     # Suppose you have budgets 0..5:
     all_budgets = [0, 2, 3, 4, 5]
     #all_budgets = [2, 3, 4, 5]
