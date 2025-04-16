@@ -35,14 +35,15 @@ MODEL_PATH = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fa
 
 
 def interpolate_runs(runs, w=100):
-    all_steps = np.array(sorted(np.unique(np.concatenate([r[:,0] for r in runs]))))
-    all_values = np.stack([np.interp(all_steps, r[:,0], r[:,1]) for r in runs], axis=0)
+    # Create a common x_grid from all runs’ first column values
+    all_steps = np.array(sorted(np.unique(np.concatenate([r[:, 0] for r in runs]))))
+    all_values = np.stack([np.interp(all_steps, r[:, 0], r[:, 1]) for r in runs], axis=0)
     return all_steps, all_values
 
 def load_runs_from_logdir(logdir):
     """
-    Recursively finds all 'log.h5' files in logdir, loads the final
-    Pareto front from each, and returns a list of dicts (each has 'pareto_front').
+    Recursively finds all 'log.h5' files in logdir, loads the final Pareto front
+    from each, and returns a list of dicts (each has 'pareto_front').
     """
     logdir_path = Path(logdir)
     runs = []
@@ -53,86 +54,104 @@ def load_runs_from_logdir(logdir):
             runs.append({'pareto_front': pareto_front})
     return runs
 
-def plot_pareto_front_from_dir(logdir, budget_label, scale_x=10000, scale_y=100, save=True):
+def plot_fixed_data():
+    """
+    Reads in fixed.csv (assumes two columns: x and y) and plots its data using plt.scatter.
+    """
+    df_fixed = pd.read_csv("fixed.csv")
+    plt.scatter(df_fixed["o_0"], df_fixed["o_1"], s=5, alpha=0.7, label="fixed", marker='o')
+
+def plot_pareto_front_from_dir(logdir, budget_label, scale_x=10000, scale_y=100,
+                               save=True, use_interpolation=True, extreme_y_threshold=-20):
     """
     1) Loads Pareto‐front data from `logdir`.
-    2) Removes duplicates and sorts each front by objective‐0 (assumed x).
-    3) Interpolates across runs (seeds).
-    4) Plots the mean ± std fill for the coverage set.
-    5) Optionally saves the figure as 'NCS_ref_interp_budget_{budget_label}.png'.
-
-    Returns (x_vals_scaled, mean_curve, std_curve) so we can re‐plot or combine.
+    2) Removes duplicate points, computes the nondominated front, and filters out extreme y values (< extreme_y_threshold).
+    3) If use_interpolation is True:
+          - Interpolates across seeds and computes the mean ± std.
+       Otherwise:
+          - Plots each seed’s curve directly (raw curves without interpolation).
+    4) In both cases, overlays the data from fixed.csv.
+    5) Finally, it plots and (optionally) saves the resulting figure.
+    Returns (x_vals_scaled, mean_curve, std_curve) when using interpolation; otherwise (None, None, None).
     """
     # 1) Load all runs
     runs = load_runs_from_logdir(logdir)
 
-    # 2) Sort each run’s front by the first objective
+    # 2) Process each run’s Pareto front:
     sorted_runs = []
     for run in runs:
         pf = run['pareto_front']
         pf = np.unique(pf, axis=0)
         pf = non_dominated(pf)
-        pf = pf[np.argsort(pf[:, 0])]       # sort by first dimension (objective 0)
+        # Filter out points with y (second column) below the threshold.
+        pf = pf[pf[:, 1] >= extreme_y_threshold]
+        if pf.size == 0:
+            continue  # Skip this run if all points are filtered out
+        pf = pf[np.argsort(pf[:, 0])]  # sort by first dimension (objective 0)
         sorted_runs.append(pf)
 
-    # If no runs found, just return None
     if not sorted_runs:
-        print(f"No runs found for {logdir}")
+        print(f"No valid runs found for {logdir} after filtering extreme y values.")
         return None, None, None
 
-    for pf in sorted_runs:
-        # scale
-        x_vals_scaled = pf[:, 0] * scale_x
-        y_vals_scaled = pf[:, 1] * scale_y
-        plt.plot(x_vals_scaled, y_vals_scaled, alpha=0.7)
+    if use_interpolation:
+        # Interpolate across seeds on a common grid.
+        x_vals, y_vals = interpolate_runs(sorted_runs)
+        # Scale the x and y values.
+        x_vals_scaled = x_vals * scale_x
+        y_vals_scaled = y_vals * scale_y
+        # Compute mean and standard deviation across runs.
+        mean_curve = np.mean(y_vals_scaled, axis=0)
+        std_curve = np.std(y_vals_scaled, axis=0)
 
-    plt.xlabel('Hospitalizations (scaled)')
-    plt.ylabel('Social Burden (scaled)')
-    plt.title(f'Coverage set (no interp) budget={budget_label}')
-    plt.tight_layout()
+        plt.figure()
+        plt.plot(x_vals_scaled, mean_curve, label=f'Mean coverage set (b={budget_label})')
+        plt.fill_between(x_vals_scaled, mean_curve - std_curve, mean_curve + std_curve, alpha=0.2)
+        # Overlay fixed.csv data.
+        plot_fixed_data()
 
-    # # 3) Interpolate across seeds to get mean curve
-    # x_vals, y_vals = interpolate_runs(sorted_runs)
-    #
-    # # 4) Scale
-    # x_vals_scaled = x_vals * scale_x
-    # y_vals_scaled = y_vals * scale_y
-    #
-    # # Compute mean ± std
-    # mean_curve = np.mean(y_vals_scaled, axis=0)
-    # std_curve = np.std(y_vals_scaled, axis=0)
-    #
-    # # 5) Plot
-    # plt.figure()
-    # plt.plot(x_vals_scaled, mean_curve, label=f'Mean coverage set (b={budget_label})')
-    # plt.fill_between(
-    #     x_vals_scaled,
-    #     mean_curve - std_curve,
-    #     mean_curve + std_curve,
-    #     alpha=0.2
-    # )
-    plt.xlabel('Hospitalizations (scaled)')
-    plt.ylabel('Social Burden (scaled)')
-    plt.title(f'Coverage set variation (budget={budget_label})')
-    plt.legend()
-    plt.tight_layout()
-
-    if save:
-        outname = f"NCS_ref_interp_budget_{budget_label}.png"
-        plt.savefig(outname)
-        print(f"Saved {outname}")
+        plt.xlabel('Hospitalizations (scaled)')
+        plt.ylabel('Social Burden (scaled)')
+        plt.title(f'Coverage set variation (budget={budget_label})')
+        plt.legend()
+        plt.tight_layout()
+        if save:
+            outname = f"NCS_ref_interp_budget_{budget_label}.png"
+            plt.savefig(outname)
+            print(f"Saved {outname}")
+        else:
+            plt.show()
+        return x_vals_scaled, mean_curve, std_curve
     else:
-        plt.show()
+        # Plot raw curves for each seed.
+        plt.figure()
+        for pf in sorted_runs:
+            x = pf[:, 0] * scale_x
+            y = pf[:, 1] * scale_y
+            plt.plot(x, y, alpha=0.7, label='Seed curve')
+        # Overlay fixed.csv data.
+        plot_fixed_data()
 
-    return x_vals_scaled, 0, 0
+        plt.xlabel('Hospitalizations (scaled)')
+        plt.ylabel('Social Burden (scaled)')
+        plt.title(f'Coverage set variation (raw data) (budget={budget_label})')
+        plt.legend()
+        plt.tight_layout()
+        if save:
+            outname = f"NCS_nointerp_budget_{budget_label}.png"
+            plt.savefig(outname)
+            print(f"Saved {outname}")
+        else:
+            plt.show()
+        return None, None, None
 
 def make_budget_plots():
     # The top-level folder containing budget_{i} subdirs
     BASELINE_DIR = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/agent/pcn/baseline_results"
-
+    plt.rcParams["figure.figsize"] = (15, 15)
     # Suppose you have budgets 0..5:
-    #all_budgets = [0, 1, 2, 3, 4, 5]
-    all_budgets = [2, 3, 4, 5]
+    all_budgets = [0, 2, 3, 4, 5]
+    #all_budgets = [2, 3, 4, 5]
     # We'll store the (x_vals, mean_curve, std_curve) in a dict
     results_dict = {}
 
@@ -160,6 +179,7 @@ def make_budget_plots():
             mean_curve + std_curve,
             alpha=0.1
         )
+    plot_fixed_data()
     plt.xlabel('Hospitalizations (scaled)')
     plt.ylabel('Social Burden (scaled)')
     plt.title('Coverage set variation for multiple budgets')

@@ -424,6 +424,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', default='densebig_silu', type=str, help='conv1d(big|small), dense(big|small)')
     parser.add_argument('--clip_grad_norm', default=5, type=float, help='clip gradient norm during pcn update')
     parser.add_argument('--budget', default=None, type=int, help='number of times each action is allowed to change')
+    parser.add_argument('--env-type', default='ode', type=str, help='ode or binomial')
 
     args = parser.parse_args()
     no_save = False
@@ -475,7 +476,7 @@ if __name__ == '__main__':
     n_evaluations = 10
 
     env, model, logdir, ref_point, scaling_factor, max_return = create_fairness_framework_env(args)
-    if args.env == 'ODE' or args.env == 'ode':
+    if args.env == 'ode':
         n_evaluations = 1
     else:
         n_evaluations = 10
