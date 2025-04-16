@@ -313,25 +313,33 @@ def compute_sbs(states):
         fairness_window += fairness.sum()
     return fairness_window
 
-def compute_abfta(states):
+def compute_abfta(states, distance_metric="kl"):
     fairness_window = 0
+    counter = 0
 
     for state_df, C_diff in states:
         reduction_impact = get_reduction_impact(C_diff)
         hospitalization_risks = state_df["h_risk"].values
         K = len(hospitalization_risks)
 
+        if isinstance(distance_metric, str) and distance_metric == "kl":
+            distance_metric = kl_divergence
+        if isinstance(distance_metric, str) and distance_metric == "hellinger":
+            distance_metric = hellinger
+
         fairness = 0
         n = 0
         for i in range(K):
             for j in range(i + 1, K):
-                distance_reductions = get_distance_reduction(reduction_impact, i, j)
+                d_i, d_j = get_reduction_distributions(reduction_impact, i, j)
+                distance_reductions = distance_metric(d_i, d_j, 0)
                 diff = np.abs(hospitalization_risks[i] - hospitalization_risks[j]) - distance_reductions
                 fairness += diff
                 n += 1
 
         if n > 0:
             fairness_window += -1 + (fairness / n)
+        counter += 1
 
     return fairness_window
 

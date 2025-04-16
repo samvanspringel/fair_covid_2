@@ -40,7 +40,7 @@ def generate_fixed_coverage_set(env, fairness, amount_of_policies=100):
     us = np.linspace(0, 1, amount_of_policies)
     for u in us:
         fixed_action = np.array([u, u, u], dtype=np.float32)
-        print(f"Executing fixed policy {fixed_action}")
+        #print(f"Executing fixed policy {fixed_action}")
         # Reset the environment to the initial state.
         env.reset()
         done = False
@@ -59,7 +59,7 @@ def generate_fixed_coverage_set(env, fairness, amount_of_policies=100):
         if fairness == "SBS":
             y_value = compute_sbs(fairness_states)
         elif fairness == "ABFTA":
-            y_value = compute_abfta(fairness_states)
+            y_value = compute_abfta(fairness_states, distance_metric="kl")
         else:
             y_value = cumulative_reward[1]
         policy_results.append([hospitalizations, y_value])

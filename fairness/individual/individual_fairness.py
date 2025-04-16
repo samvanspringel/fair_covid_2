@@ -31,6 +31,9 @@ def key_state(s):
 
 SQRT2 = np.sqrt(2)
 
+def kl_divergence(p, q, num_actions):
+    kl_ij = np.sum(p * np.log(p / q))
+    return kl_ij
 
 def hellinger(p, q, num_actions):
     # Slightly faster computation time
@@ -83,25 +86,28 @@ def get_reduction_impact(C_diff):
     return np.sum(C_diff, axis=2).T
 
 
-def get_distance_reduction(reduction_matrix, i, j):
-    epsilon = 1e-12
+def get_reduction_distributions(reduction_matrix, i, j, epsilon=1e-12):
+    """
+    Interprets each row of reduction_matrix as a 'reduction distribution' across areas,
+    by taking absolute values and normalizing to sum=1.
+    Then computes the KL divergence between group i's distribution and group j's distribution.
+    """
+    # Take absolute values for row i, then normalize
+    row_i = np.abs(reduction_matrix[i])
 
-    reduction_i = np.sum(reduction_matrix[i])
-    if reduction_i < epsilon:
-        normalized_reduction_i = np.full_like(reduction_matrix[i], 1.0 / len(reduction_matrix[i]))
-    else:
-        normalized_reduction_i = reduction_matrix[i] / reduction_i
+    # Take absolute values for row j, then normalize
+    row_j = np.abs(reduction_matrix[j])
 
-    reduction_j = np.sum(reduction_matrix[j])
-    if reduction_j < epsilon:
-        normalized_reduction_j = np.full_like(reduction_matrix[j], 1.0 / len(reduction_matrix[j]))
-    else:
-        normalized_reduction_j = reduction_matrix[j] / reduction_j
+    temperature = 0.001
+    p_i = np.exp(row_i / temperature)
+    p_i /= p_i.sum()
+    p_j = np.exp(row_j / temperature)
+    p_j /= p_j.sum()
 
-    normalized_reduction_i_safe = np.clip(normalized_reduction_i, epsilon, None)
-    normalized_reduction_j_safe = np.clip(normalized_reduction_j, epsilon, None)
+    p_i_clipped = np.clip(p_i, epsilon, None)
+    p_j_clipped = np.clip(p_j, epsilon, None)
 
-    return np.sum(normalized_reduction_i_safe * np.log(normalized_reduction_i_safe / normalized_reduction_j_safe))
+    return p_i_clipped, p_j_clipped
 
 
 class IndividualFairness(IndividualFairnessBase):
@@ -540,10 +546,15 @@ class IndividualFairness(IndividualFairnessBase):
         return (0, 0), fairness_window, (0, [], 0)
 
     def age_based_fairness_through_unawareness(self, history: History, threshold=None, similarity_metric=None,
-                                               alpha=None, distance_metric=("braycurtis", "braycurtis")):
+                                               alpha=None, distance_metric="kl"):
 
         fairness_window = 0
         states, actions, true_actions, scores, rewards = history.get_history()
+
+        if isinstance(distance_metric, str) and distance_metric == "kl":
+            distance_metric = kl_divergence
+        if isinstance(distance_metric, str) and distance_metric == "hellinger":
+            distance_metric = hellinger
 
         for state_df, C_diff in states:
             reduction_impact = get_reduction_impact(C_diff)
@@ -554,7 +565,8 @@ class IndividualFairness(IndividualFairnessBase):
             n = 0
             for i in range(K):
                 for j in range(i + 1, K):
-                    distance_reductions = get_distance_reduction(reduction_impact, i, j)
+                    d_i, d_j = get_reduction_distributions(reduction_impact, i, j)
+                    distance_reductions = distance_metric(d_i, d_j, 0)
                     diff = np.abs(hospitalization_risks[i] - hospitalization_risks[j]) - distance_reductions
                     fairness += diff
                     n += 1

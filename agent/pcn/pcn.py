@@ -1,4 +1,6 @@
 import sys
+import time
+
 sys.path.append("./")  # for command-line execution to find the other packages (e.g. envs)
 
 import heapq
@@ -11,7 +13,7 @@ from pygmo import hypervolume
 from agent.pcn.logger import Logger
 import wandb
 import pickle
-
+from loggers.logger import *
 
 def crowding_distance(points, ranks=None):
     crowding = np.zeros(points.shape)
@@ -277,13 +279,13 @@ def update_model(model, opt, experience_replay, batch_size, noise=0., clip_grad_
     return l, log_prob
 
 
-def eval(env, model, coverage_set, horizons, max_return, gamma=1., n=10):
+def eval(env, model, coverage_set, horizons, max_return, agent_logger, current_ep, current_t, gamma=1., n=10):
     e_returns = np.empty((coverage_set.shape[0], n, coverage_set.shape[-1]))
     all_transitions = []
     for e_i, target_return, horizon in zip(np.arange(len(coverage_set)), coverage_set, horizons):
         n_transitions = []
         for n_i in range(n):
-            transitions = run_episode(env, model, target_return, np.float32(horizon), max_return, eval=True)
+            transitions = run_episode_fair_covid(env, model, target_return, np.float32(horizon), max_return, agent_logger, current_ep, current_t,  eval=True)
             # compute return
             for i in reversed(range(len(transitions)-1)):
                 transitions[i].reward += gamma * transitions[i+1].reward
@@ -437,10 +439,21 @@ def train(env,
             wandb.run.log_artifact(executions_transitions)
 
 
-def run_episode_fair_covid(env, model, desired_return, desired_horizon, max_return):
+def run_episode_fair_covid(env, model, desired_return, desired_horizon, max_return, agent_logger, episode, current_t, eval=False):
+    curr_t = time.time()
     transitions = []
     obs = env.reset()
     done = False
+    t = current_t
+    log_entries = []
+
+    if eval:
+        path = agent_logger.path_eval
+        status = "eval"
+    else:
+        path = agent_logger.path_train
+        status = "train"
+
     while not done:
         action = choose_action(model, obs, desired_return, desired_horizon, eval=eval)
         n_obs, reward, done, info = env.step(action)
@@ -461,6 +474,19 @@ def run_episode_fair_covid(env, model, desired_return, desired_horizon, max_retu
         desired_return = np.clip(desired_return-reward, None, max_return, dtype=np.float32)
         # clip desired horizon to avoid negative horizons
         desired_horizon = np.float32(max(desired_horizon-1, 1.))
+
+        next_t = time.time()
+        if not eval:
+            log_entries.append(
+                agent_logger.create_entry(episode, t, obs, action, reward, done, info, next_t - curr_t,
+                                          status))
+
+        curr_t = next_t
+        t += 1
+
+    if eval:
+        agent_logger.write_data(log_entries, path)
+
     return transitions
 
 
@@ -489,13 +515,40 @@ def train_fair_covid(env,
         objectives = tuple([i for i in range(len(ref_point))])
     total_episodes = n_er_episodes
     opt = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+
     logger = Logger(logdir=logdir)
+
+    # TODO Alexandra logs
+    agent_logger = AgentLogger(f"{logdir}/agent_log_e_replay.csv", f"{logdir}/agent_log_train.csv",
+                               f"{logdir}/agent_log_eval.csv", f"{logdir}/agent_log_eval_axes.csv")
+    # leaves_logger = LeavesLogger(
+    #     objective_names=env.obj_names if isinstance(env, ExtendedfMDP) else [f'o_{o}' for o in objectives])
+    all_obj = [i for i in range(len(ref_point))]
+    pcn_logger = TrainingPCNLogger(objectives=all_obj)
+    eval_logger = EvalLogger(objectives=all_obj)
+    discount_history_logger = DiscountHistoryLogger() if env.fairness_framework.discount_factor else None
+    env.fairness_framework.history.logger = discount_history_logger
+
+    # agent_logger.create_file(agent_logger.path_eval_axes)
+    agent_logger.create_file(agent_logger.path_eval)
+    agent_logger.create_file(agent_logger.path_train)
+    agent_logger.create_file(agent_logger.path_experience)
+
+    # leaves_logger.create_file(f"{logdir}/leaves_log.csv")
+    pcn_logger.create_file(f"{logdir}/pcn_log.csv")
+    eval_logger.create_file(f"{logdir}/eval_log.csv")
+    if discount_history_logger:
+        discount_history_logger.create_file(f"{logdir}/history.csv")
+
+
     n_checkpoints = 0
     # fill buffer with random episodes
     experience_replay = []
     for ep in range(n_er_episodes):
+        curr_t = time.time()
         transitions = []
-        history_entries = []
+        log_entries = []
         obs = env.reset()
         done = False
         while not done:
@@ -503,13 +556,23 @@ def train_fair_covid(env,
             n_obs, reward, done, info = env.step(action)
             if 'action' in info:
                 action = info['action']
+
+            # TODO Alexandra logs
             transitions.append(Transition(obs, action, np.float32(reward).copy(), n_obs, done))
+            next_t = time.time()
+            log_entries.append(agent_logger.create_entry(ep, step, obs, action, reward, done, info, next_t - curr_t,
+                                                         status="e_replay"))
+            curr_t = next_t
+
             obs = n_obs
             step += 1
             if step % 100 == 0:
                 print("t=", step, ep, action, reward)
         # add episode in-place
         add_episode(transitions, experience_replay, gamma=gamma, max_size=max_size, step=step)
+        agent_logger.write_data(log_entries, agent_logger.path_experience)
+
+    del log_entries
     print("Training...")
     update_num = 0
     print_update_interval = 5
@@ -551,7 +614,7 @@ def train_fair_covid(env,
         returns = []
         horizons = []
         for _ in range(n_step_episodes):
-            transitions = run_episode_fair_covid(env, model, desired_return, desired_horizon, max_return)
+            transitions = run_episode_fair_covid(env, model, desired_return, desired_horizon, max_return, agent_logger, episode=ep, current_t=step, eval=False)
             step += len(transitions)
             ep += 1
             add_episode(transitions, experience_replay, gamma=gamma, max_size=max_size, step=step)
@@ -596,7 +659,7 @@ def train_fair_covid(env,
             e_returns = e_returns[e_i]
             e_lengths = e_lengths[e_i]
 
-            e_r, t_r = eval(env, model, e_returns, e_lengths, max_return, gamma=gamma, n=n_evaluations)
+            e_r, t_r = eval(env, model, e_returns, e_lengths, max_return, agent_logger, current_t=step, current_ep=ep, gamma=gamma, n=n_evaluations)
             # save raw evaluation returns
             logger.put(f'eval/returns/{n_checkpoints}', e_r, 0, f'{len(e_r)}d')
             # compute e-metric
@@ -628,3 +691,10 @@ def train_fair_covid(env,
                 'eps_mean': epsilon.mean(),
             }, step=step)
             wandb.run.log_artifact(executions_transitions)
+
+            # TODO Alexandra logs
+            entries = []
+            for d, r in zip(e_returns, e_r):
+                entry = eval_logger.create_entry(ep, step, epsilon.max(), epsilon.mean(), d, r.mean(0), "eval")
+                entries.append(entry)
+            eval_logger.write_data(entries)
