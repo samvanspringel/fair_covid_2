@@ -465,7 +465,7 @@ def create_fairness_framework_env(args):
 
     wandb.login(key='d013457b05ccb7e9b3c54f86806d3bd4c7f2384a')
 
-    wandb.init(group=f"runs_fairness_{string_obj}_budget:{args.budget}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
+    wandb.init(group=f"runs_fairness_{string_obj}_{args.steps}_budget:{args.budget}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
 
     return env, model, logdir, ref_point, scaling_factor, max_return
 
