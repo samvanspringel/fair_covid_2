@@ -1,5 +1,6 @@
 import sys
 import time
+import warnings
 
 sys.path.append("./")  # for command-line execution to find the other packages (e.g. envs)
 
@@ -14,6 +15,7 @@ from agent.pcn.logger import Logger
 import wandb
 import pickle
 from loggers.logger import *
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 def crowding_distance(points, ranks=None):
     crowding = np.zeros(points.shape)

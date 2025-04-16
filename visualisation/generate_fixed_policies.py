@@ -13,16 +13,22 @@ def plot_coverage_set(files, measure):
         df_fixed = pd.read_csv(file)
 
         # Check if mean of first column > 3000, and scale if needed
-        if df_fixed.iloc[:, 0].mean() < -3000:
-            df_fixed.iloc[:, 0] = df_fixed.iloc[:, 0] / 1
-
-        plt.scatter(df_fixed.iloc[:, 0], df_fixed.iloc[:, 1],
+        if 'o_0' in df_fixed.columns and 'o_1' in df_fixed.columns:
+            x = df_fixed['o_0'].values
+            y = df_fixed['o_1'].values
+        else:
+            x = df_fixed.iloc[:, 0].values
+            y = df_fixed.iloc[:, 1].values
+        print(x)
+        print(y)
+        plt.scatter(x, y,
                     label=f"{file}", marker='o')
 
     plt.xlabel("Hospitalizations (possibly scaled by 1e4)")
     plt.ylabel(f"Measure {measure}")
     plt.title(f"Coverage Set Fixed Policies for Measure {measure}")
     plt.legend()
+    plt.ylim(-1500, 0)
     plt.grid(True)
     plt.tight_layout()
     plt.show()
