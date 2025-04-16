@@ -61,7 +61,7 @@ def plot_fixed_data():
     df_fixed = pd.read_csv("fixed.csv")
     plt.scatter(df_fixed["o_0"], df_fixed["o_1"], s=5, alpha=0.7, label="fixed", marker='o')
 
-def plot_pareto_front_from_dir(logdir, budget_label, scale_x=10000, scale_y=100,
+def plot_pareto_front_from_dir(logdir, budget_label, scale_x=10000, scale_y=90,
                                save=True, use_interpolation=True, extreme_y_threshold=-20):
     """
     1) Loads Pareto‐front data from `logdir`.
