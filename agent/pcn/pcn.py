@@ -251,6 +251,7 @@ def update_model(model, opt, experience_replay, batch_size, noise=0., clip_grad_
     obs, actions, desired_return, desired_horizon = zip(*batch)
     # since each state is a tuple with (compartment, events, prev_action), reorder obs
     obs = zip(*obs)
+
     obs = tuple([torch.tensor(o).to(device) for o in obs])
     # TODO TEST add noise to the desired return
     desired_return = torch.tensor(desired_return).to(device)
