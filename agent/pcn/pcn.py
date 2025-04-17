@@ -642,6 +642,16 @@ def train_fair_covid(env,
         hv = compute_hypervolume(np.expand_dims(valid_e_returns[:, objectives], 0), ref_point[objectives,])[0] if len(
             valid_e_returns) else 0
 
+        # TODO Alexandra loggers
+        nd_coverage_set, e_i = non_dominated(e_returns[:, objectives], return_indexes=True)
+        entry = pcn_logger.create_entry(ep, step, np.mean(loss), np.mean(entropy), desired_horizon,
+                                        np.linalg.norm(np.mean(horizons) - desired_horizon), np.mean(horizons), hv,
+                                        e_returns, nd_coverage_set,
+                                        np.mean(np.array(returns), axis=0), desired_return,
+                                        [np.linalg.norm(np.mean(np.array(returns)[:, o]) - desired_return[o]) for o in
+                                         range(len(desired_return))])
+        pcn_logger.write_data(entry)
+
         wandb.log({
             'episode': total_episodes,
             'episode_steps': np.mean(horizons),

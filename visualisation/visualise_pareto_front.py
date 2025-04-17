@@ -49,9 +49,14 @@ def load_runs_from_logdir(logdir):
     runs = []
     for path in logdir_path.rglob('log.h5'):
         with h5py.File(path, 'r') as logfile:
-            pf = logfile['train/leaves/ndarray']
-            pareto_front = pf[-1]
-            runs.append({'pareto_front': pareto_front})
+            pareto_front = logfile['train/leaves/ndarray'][-1]
+            _, pareto_front_i = non_dominated(pareto_front[:, [0, 1]], return_indexes=True)
+            pf = pareto_front[pareto_front_i]
+
+            # pf = pf[pf[:, 1] >= extreme_y_threshold]
+            pf = pf[np.argsort(pf[:, 0])]  # sort by first dimension (objective 0)
+
+            runs.append({'pareto_front': pf})
     return runs
 
 def plot_fixed_data(measure):

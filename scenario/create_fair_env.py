@@ -292,11 +292,17 @@ def create_fair_covid_env(args, rewards_to_keep, fairness_notions):
     scale, ref_point, scaling_factor, max_return = get_scaling(rewards_to_keep, fairness_notions)
     print(f"SF: {scaling_factor}")
 
+    lockdown = False
+    if lockdown:
+        l = "WithLockdown"
+    else:
+        l = ""
+
     if args.action == 'discrete':
-        env = gym.make(f'BECovidWithLockdown{env_type}Discrete-v0')
+        env = gym.make(f'BECovid{l}{env_type}Discrete-v0')
         nA = env.action_space.n
     else:
-        env = gym.make(f'BECovidWithLockdown{env_type}{budget}Continuous-v0')
+        env = gym.make(f'BECovid{l}{env_type}{budget}Continuous-v0')
         if args.action == 'multidiscrete':
             env = multidiscrete_env(env)
             nA = env.action_space.nvec.sum()
