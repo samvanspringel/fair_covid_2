@@ -50,18 +50,25 @@ def load_runs_from_logdir(logdir):
     for path in logdir_path.rglob('log.h5'):
         with h5py.File(path, 'r') as logfile:
             pf = logfile['train/leaves/ndarray']
-            pareto_front = pf[-1]  # final front
+            pareto_front = pf[-1]
             runs.append({'pareto_front': pareto_front})
     return runs
 
-def plot_fixed_data():
+def plot_fixed_data(measure):
     """
     Reads in fixed.csv (assumes two columns: x and y) and plots its data using plt.scatter.
     """
-    df_fixed = pd.read_csv("cs_fixed.csv")
-    plt.scatter(df_fixed["o_0"], df_fixed["o_1"], s=5, alpha=0.7, label="fixed", marker='o')
+    df_fixed = pd.read_csv(f"fixed_{measure}.csv")
+    # Check if mean of first column > 3000, and scale if needed
+    if 'o_0' in df_fixed.columns and 'o_1' in df_fixed.columns:
+        x = df_fixed['o_0'].values
+        y = df_fixed['o_1'].values
+    else:
+        x = df_fixed.iloc[:, 0].values
+        y = df_fixed.iloc[:, 1].values
+    plt.scatter(x, y, s=5, alpha=0.7, label="fixed", marker='o')
 
-def plot_pareto_front_from_dir(logdir, budget_label, scale_x=10000, scale_y=90,
+def plot_pareto_front_from_dir(measure, logdir, budget_label, scale_x=10000, scale_y=90,
                                save=False, use_interpolation=True, extreme_y_threshold=-20):
     """
     1) Loads Pareto‐front data from `logdir`.
@@ -108,7 +115,7 @@ def plot_pareto_front_from_dir(logdir, budget_label, scale_x=10000, scale_y=90,
         plt.plot(x_vals_scaled, mean_curve, label=f'Mean coverage set (b={budget_label})')
         plt.fill_between(x_vals_scaled, mean_curve - std_curve, mean_curve + std_curve, alpha=0.2)
         # Overlay fixed.csv data.
-        plot_fixed_data()
+        plot_fixed_data(measure)
 
         plt.xlabel('Hospitalizations (scaled)')
         plt.ylabel('Social Burden (scaled)')
@@ -130,7 +137,7 @@ def plot_pareto_front_from_dir(logdir, budget_label, scale_x=10000, scale_y=90,
             y = pf[:, 1] * scale_y
             plt.plot(x, y, alpha=0.7, label='Seed curve')
         # Overlay fixed.csv data.
-        plot_fixed_data()
+        plot_fixed_data(measure)
 
         plt.xlabel('Hospitalizations (scaled)')
         plt.ylabel('Social Burden (scaled)')
@@ -145,7 +152,7 @@ def plot_pareto_front_from_dir(logdir, budget_label, scale_x=10000, scale_y=90,
             plt.show()
         return None, None, None
 
-def make_budget_plots():
+def make_budget_plots(measure, scale_x, scale_y):
     # The top-level folder containing budget_{i} subdirs
     BASELINE_DIR = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/agent/pcn/baseline_results"
     plt.rcParams["figure.figsize"] = (17, 15)
@@ -159,11 +166,12 @@ def make_budget_plots():
     for b in all_budgets:
         subdir = os.path.join(BASELINE_DIR, f"budget_{b}")
         x_vals_scaled, mean_curve, std_curve = plot_pareto_front_from_dir(
+            measure,
             logdir=subdir,
             budget_label=str(b),
-            scale_x=10000,
-            scale_y=100,
-            save=True
+            scale_x=scale_x,
+            scale_y=scale_y,
+            save=False
         )
         if x_vals_scaled is not None:
             # Store for final combined plot
@@ -179,7 +187,7 @@ def make_budget_plots():
             mean_curve + std_curve,
             alpha=0.1
         )
-    plot_fixed_data()
+    plot_fixed_data(measure)
     plt.xlabel('Hospitalizations (scaled)')
     plt.ylabel('Social Burden (scaled)')
     plt.title('Coverage set variation for multiple budgets')
@@ -193,7 +201,7 @@ def plot_pareto_fronts_sbs():
     csv_files = ["sbs.csv", "sbs1.csv", "sbs2.csv", "sbs3.csv", "sbs4.csv"]
     fig, axs = plt.subplots(2, 1, figsize=(10, 14))
 
-    df_fixed = pd.read_csv("fixed.csv")
+    df_fixed = pd.read_csv("fixed_sb.csv")
     axs[0].scatter(df_fixed["o_0"], df_fixed["o_1"], s=5, alpha=0.7, label="fixed", marker='o')
 
     arh_l, arh_max, arh_min = [], [], []
@@ -602,9 +610,19 @@ def main():
         plt.savefig(path)
 
 
+def get_scaling_plot(measure):
+    if measure == "sb":
+        return 10000, 90
+    elif measure == "sbs":
+        return 10000, 4e6
+    elif measure == "abfta":
+        return 10000, 170
+
 
 if __name__ == "__main__":
-    make_budget_plots()
+    measure = "sbs"
+    scale_x, scale_y = get_scaling_plot(measure)
+    make_budget_plots(measure, scale_x, scale_y)
     # print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
     # plot_pareto_fronts_sbs()
     # print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")

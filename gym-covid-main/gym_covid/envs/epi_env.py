@@ -152,7 +152,7 @@ class EpiEnv(gym.Env):
         # next-state , reward, terminal?, info
         # provide action as proxy for current SCM, impacts progression of epidemic
         # return (state_n, event_n, action.copy()), np.array([r_ari, r_arh, r_sr_w, r_sr_s, r_sr_l]), False, {}
-        return (state_n, event_n, action.copy()), np.array([r_arh, r_sr.sum()]), False, {"lost_contacts_per_age": r_sr_per_age}
+        #return (state_n, event_n, action.copy()), np.array([r_arh, r_sr.sum()]), False, {"lost_contacts_per_age": r_sr_per_age}
         return (state_n, event_n, action.copy()), np.array([r_arh]), False, {"lost_contacts_per_age": r_sr_per_age}
 
 

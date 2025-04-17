@@ -4,13 +4,27 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from gym_covid import *
 from visualise_pareto_front import compute_sbs, compute_abfta
+from pathlib import Path
+from agent.pcn.pcn import choose_action, non_dominated
+from scenario.create_fair_env import *
+from scenario.pcn_model import *
+from fairness.individual.individual_fairness import *
 
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+import datetime
+import pandas as pd
+import h5py
 
 def plot_coverage_set(files, measure):
     plt.figure(figsize=(8, 6))  # Create one figure
 
     for file in files:
-        df_fixed = pd.read_csv(file)
+        if "h5" in file:
+            df_fixed = get_df_pareto_front_log()
+        else:
+            df_fixed = pd.read_csv(file)
 
         # Check if mean of first column > 3000, and scale if needed
         if 'o_0' in df_fixed.columns and 'o_1' in df_fixed.columns:
@@ -19,8 +33,7 @@ def plot_coverage_set(files, measure):
         else:
             x = df_fixed.iloc[:, 0].values
             y = df_fixed.iloc[:, 1].values
-        print(x)
-        print(y)
+
         plt.scatter(x, y,
                     label=f"{file}", marker='o')
 
@@ -33,6 +46,35 @@ def plot_coverage_set(files, measure):
     plt.tight_layout()
     plt.show()
 
+def interpolate_run(run, w=100):
+    # Create a common x_grid from all runs’ first column values
+    # Create a uniform x grid
+    all_steps = np.linspace(run[:, 0].min(), run[:, 0].max())
+
+    # Interpolate y-values over that grid
+    all_values = np.interp(all_steps, run[:, 0], run[:, 1])
+
+    return all_steps, all_values
+
+def get_df_pareto_front_log():
+    logdir = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/visualisation/seed_9_budget_0"
+    logdir_path = Path(logdir)
+    for path in logdir_path.rglob('log.h5'):
+        with h5py.File(path, 'r') as logfile:
+            pareto_front = logfile['train/leaves/ndarray'][-1]
+            _, pareto_front_i = non_dominated(pareto_front[:, [0, 1]], return_indexes=True)
+            pf = pareto_front[pareto_front_i]
+
+            #pf = pf[pf[:, 1] >= extreme_y_threshold]
+            pf = pf[np.argsort(pf[:, 0])]  # sort by first dimension (objective 0)
+
+            x, y = interpolate_run(pf)
+
+            pf = np.vstack([x, y]).T * np.array([10000, 90])
+
+            df = pd.DataFrame(pf, columns=['o_0', 'o_1'])
+
+    return df
 
 def generate_fixed_coverage_set(env, fairness, amount_of_policies=100):
     """
@@ -89,4 +131,5 @@ if __name__ == '__main__':
     # df.to_csv(f"fixed_{y_measure}.csv", index=False)
     # print("Saved fixed policies")
     #plot_coverage_set([f"fixed_{y_measure}.csv"], y_measure)
-    plot_coverage_set(["test.csv", "cs_fixed.csv"], y_measure)
+    #plot_coverage_set(["test.csv", "cs_fixed.csv"], y_measure)
+    plot_coverage_set(["log.h5", "fixed_sb.csv"], "SB")
