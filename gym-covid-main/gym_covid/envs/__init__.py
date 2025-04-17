@@ -112,8 +112,15 @@ class EndPenalty(gym.Wrapper):
             # assume x2-x1=1
             d_I = I[-1]-I[0]
             # if slope too high (meaning next wave is coming up), add penalty
-            if d_I >= EndPenalty.d_I_limit:
-                r[1] -= EndPenalty.d_I_penalty
+            # if d_I >= EndPenalty.d_I_limit:
+            #     r[1] -= EndPenalty.d_I_penalty
+
+            # Should solve issue
+            if isinstance(r, (float, np.floating)):
+                r -= EndPenalty.d_I_penalty
+            else:
+                idx = 1 if len(r) > 1 else 0
+                r[idx] -= EndPenalty.d_I_penalty
         return s, r, t, info
 
 
