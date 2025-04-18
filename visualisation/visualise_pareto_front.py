@@ -159,7 +159,7 @@ def plot_pareto_front_from_dir(measure, logdir, budget_label, scale_x=10000, sca
 
 def make_budget_plots(measure, scale_x, scale_y):
     # The top-level folder containing budget_{i} subdirs
-    BASELINE_DIR = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/agent/pcn/baseline_results"
+    BASELINE_DIR = f"/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/agent/pcn/{measure}_results"
     plt.rcParams["figure.figsize"] = (17, 15)
     # Suppose you have budgets 0..5:
     all_budgets = [0, 2, 3, 4, 5]
@@ -616,16 +616,16 @@ def main():
 
 
 def get_scaling_plot(measure):
-    if measure == "sb":
+    if measure == "SB":
         return 10000, 90
-    elif measure == "sbs":
-        return 10000, 4e6
-    elif measure == "abfta":
+    elif measure == "SBS":
+        return 10000, 4e5
+    elif measure == "ABFTA":
         return 10000, 170
 
 
 if __name__ == "__main__":
-    measure = "sbs"
+    measure = "SBS"
     scale_x, scale_y = get_scaling_plot(measure)
     make_budget_plots(measure, scale_x, scale_y)
     # print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")

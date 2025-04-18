@@ -231,8 +231,8 @@ def get_scaling(rewards_to_keep, fairness_notions):
         if len(fairness_notions) == 1:
             fn = fairness_notions[0]
             if fn == IndividualNotion.SocialBurdenScore:
-                scale = np.array([10000, 4e6])
-                ref_point = np.array([-200000, -80e6]) / scale
+                scale = np.array([10000, 4e5])
+                ref_point = np.array([-200000, -80e5]) / scale
                 scaling_factor = torch.tensor([[1, 1, 0.1]]).to(device)
                 max_return = np.array([0, 0]) / scale
             elif fn == IndividualNotion.AgeBasedFairnessThroughUnawareness:
@@ -471,7 +471,7 @@ def create_fairness_framework_env(args):
 
     wandb.login(key='d013457b05ccb7e9b3c54f86806d3bd4c7f2384a')
 
-    wandb.init(group=f"runs_{string_obj}_budget:{args.budget}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
+    wandb.init(group=f"scaling_{scale}runs_{string_obj}_budget:{args.budget}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
 
     return env, model, logdir, ref_point, scaling_factor, max_return
 

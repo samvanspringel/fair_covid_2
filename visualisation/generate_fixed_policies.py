@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from gym_covid import *
-from visualise_pareto_front import compute_sbs, compute_abfta
+from visualise_pareto_front import compute_sbs, compute_abfta, get_scaling_plot
 from pathlib import Path
 from agent.pcn.pcn import choose_action, non_dominated
 from scenario.create_fair_env import *
@@ -90,11 +90,12 @@ def generate_fixed_coverage_set(env, fairness, amount_of_policies=100):
       A NumPy array of shape (n_fixed, 3)
     """
     policy_results = []
+    scaling = get_scaling_plot(measure=fairness)
     # Create n_fixed fixed policies: equally spaced between 0 and 1.
     us = np.linspace(0, 1, amount_of_policies)
     for u in us:
         fixed_action = np.array([u, u, u], dtype=np.float32)
-        #print(f"Executing fixed policy {fixed_action}")
+        print(f"Executing fixed policy {fixed_action}")
         # Reset the environment to the initial state.
         env.reset()
         done = False
@@ -122,14 +123,14 @@ def generate_fixed_coverage_set(env, fairness, amount_of_policies=100):
 
 
 if __name__ == '__main__':
-    y_measure = "ABFTA"
-    # env = gym.make(f'BECovidWithLockdownODEContinuous-v0')
-    # coverage_set = generate_fixed_coverage_set(env, y_measure, amount_of_policies=100)
-    #
-    # # Create a DataFrame and save as a CSV file:
-    # df = pd.DataFrame(coverage_set, columns=["hospitalizations", "measure"])
-    # df.to_csv(f"fixed_{y_measure}.csv", index=False)
-    # print("Saved fixed policies")
+    y_measure = "SBS"
+    env = gym.make(f'BECovidWithLockdownODEContinuous-v0')
+    coverage_set = generate_fixed_coverage_set(env, y_measure, amount_of_policies=100)
+
+    # Create a DataFrame and save as a CSV file:
+    df = pd.DataFrame(coverage_set, columns=["hospitalizations", "measure"])
+    df.to_csv(f"fixed_{y_measure}.csv", index=False)
+    print("Saved fixed policies")
     #plot_coverage_set([f"fixed_{y_measure}.csv"], y_measure)
     #plot_coverage_set(["test.csv", "cs_fixed.csv"], y_measure)
-    plot_coverage_set(["log.h5", "fixed_sb.csv"], "SB")
+    #plot_coverage_set(["log.h5", "fixed_sb.csv"], "SB")
