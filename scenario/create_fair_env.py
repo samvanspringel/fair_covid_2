@@ -231,8 +231,8 @@ def get_scaling(rewards_to_keep, fairness_notions):
         if len(fairness_notions) == 1:
             fn = fairness_notions[0]
             if fn == IndividualNotion.SocialBurdenScore:
-                scale = np.array([10000, 4e5])
-                ref_point = np.array([-200000, -80e5]) / scale
+                scale = np.array([10000, 4e6])
+                ref_point = np.array([-200000, -80e6]) / scale
                 scaling_factor = torch.tensor([[1, 1, 0.1]]).to(device)
                 max_return = np.array([0, 0]) / scale
             elif fn == IndividualNotion.AgeBasedFairnessThroughUnawareness:

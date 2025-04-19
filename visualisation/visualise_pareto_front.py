@@ -619,7 +619,7 @@ def get_scaling_plot(measure):
     if measure == "SB":
         return 10000, 90
     elif measure == "SBS":
-        return 10000, 4e5
+        return 10000, 4e6
     elif measure == "ABFTA":
         return 10000, 170
 
