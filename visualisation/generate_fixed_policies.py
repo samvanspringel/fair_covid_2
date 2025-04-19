@@ -89,8 +89,37 @@ def generate_fixed_coverage_set(env, fairness, amount_of_policies=100):
     Returns:
       A NumPy array of shape (n_fixed, 3)
     """
+    # policy_results = []
+    # # Create n_fixed fixed policies: equally spaced between 0 and 1.
+    # us = np.linspace(0, 1, amount_of_policies)
+    # for u in us:
+    #     fixed_action = np.array([u, u, u], dtype=np.float32)
+    #     print(f"Executing fixed policy {fixed_action}")
+    #     # Reset the environment to the initial state.
+    #     env.reset()
+    #     done = False
+    #     fairness_states = []
+    #     # Initialize accumulators for the rewards.
+    #     cumulative_reward = np.array([0.0, 0.0])
+    #     # Run simulation for n_steps timesteps.
+    #     while not done:
+    #         obs, reward, done, info = env.step(fixed_action)
+    #         if fairness == "SBS" or fairness == "ABFTA":
+    #             fairness_states.append(env.state_df())
+    #         cumulative_reward += reward
+    #     # In your env, r_arh is computed as negative hospitalizations,
+    #     # so flip the sign to get a positive number.
+    #     hospitalizations = cumulative_reward[0]
+    #     if fairness == "SBS":
+    #         y_value = compute_sbs(fairness_states)
+    #     elif fairness == "ABFTA":
+    #         y_value = compute_abfta(fairness_states, distance_metric="kl")
+    #     else:
+    #         y_value = cumulative_reward[1]
+    #     policy_results.append([hospitalizations, y_value])
+    #
+    # return np.array(policy_results)
     policy_results = []
-    scaling = get_scaling_plot(measure=fairness)
     # Create n_fixed fixed policies: equally spaced between 0 and 1.
     us = np.linspace(0, 1, amount_of_policies)
     for u in us:
@@ -99,25 +128,13 @@ def generate_fixed_coverage_set(env, fairness, amount_of_policies=100):
         # Reset the environment to the initial state.
         env.reset()
         done = False
-        fairness_states = []
-        # Initialize accumulators for the rewards.
-        cumulative_reward = np.array([0.0, 0.0])
         # Run simulation for n_steps timesteps.
         while not done:
             obs, reward, done, info = env.step(fixed_action)
-            if fairness == "SBS" or fairness == "ABFTA":
-                fairness_states.append(env.state_df())
-            cumulative_reward += reward
-        # In your env, r_arh is computed as negative hospitalizations,
-        # so flip the sign to get a positive number.
-        hospitalizations = cumulative_reward[0]
-        if fairness == "SBS":
-            y_value = compute_sbs(fairness_states)
-        elif fairness == "ABFTA":
-            y_value = compute_abfta(fairness_states, distance_metric="kl")
-        else:
-            y_value = cumulative_reward[1]
-        policy_results.append([hospitalizations, y_value])
+            if fairness == "SBS":
+                y_value = compute_sbs([env.state_df()])
+            hospitalizations = reward
+            policy_results.append([hospitalizations, y_value])
 
     return np.array(policy_results)
 
