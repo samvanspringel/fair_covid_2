@@ -27,8 +27,6 @@ class ScaleRewardEnv(gym.RewardWrapper):
         self.scale = scale
 
     def reward(self, reward):
-        print("Reward:", reward)
-        print("Scale:", self.scale)
         return (reward - self.min) / self.scale
 
 
