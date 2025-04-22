@@ -616,16 +616,16 @@ def main():
 
 
 def get_scaling_plot(measure):
-    if measure == "SB":
+    if measure == "sb":
         return 10000, 90
-    elif measure == "SBS":
+    elif measure == "sbs":
         return 10000, 4e6
-    elif measure == "ABFTA":
+    elif measure == "abfta":
         return 10000, 170
 
 
 if __name__ == "__main__":
-    measure = "SBS"
+    measure = "sbs"
     scale_x, scale_y = get_scaling_plot(measure)
     make_budget_plots(measure, scale_x, scale_y)
     # print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")

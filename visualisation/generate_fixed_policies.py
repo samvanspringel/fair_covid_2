@@ -150,19 +150,19 @@ def generate_fixed_coverage_set_new(env, fairness, amount_of_policies=100):
         while not done:
             obs, reward, done, info = env.step(fixed_action)
             cumulative_reward += reward
-            if fairness == "SBS":
+            if fairness == "sbs":
                 # Add current state & diff pair to window
                 fairness_states.append(env.state_df())
                 # Compute current SBS over the window and accumulate
                 diff = compute_sbs(fairness_states)
                 total_diff += diff
-            elif fairness == "ABFTA":
+            elif fairness == "abfta":
                 # existing ABFTA logic (unchanged)
                 pass
         hospitalizations = cumulative_reward[0]
-        if fairness == "SBS":
+        if fairness == "sbs":
             y_value = total_diff
-        elif fairness == "ABFTA":
+        elif fairness == "abfta":
             y_value = compute_abfta(fairness_states, distance_metric="kl")
         else:
             y_value = cumulative_reward[1]
@@ -172,7 +172,7 @@ def generate_fixed_coverage_set_new(env, fairness, amount_of_policies=100):
 
 
 if __name__ == '__main__':
-    y_measure = "SBS"
+    y_measure = "sbs"
     env = gym.make(f'BECovidWithLockdownODEContinuous-v0')
     coverage_set = generate_fixed_coverage_set_new(env, y_measure, amount_of_policies=100)
 
@@ -183,4 +183,4 @@ if __name__ == '__main__':
     print(f"Saved fixed policies in fixed_{y_measure}.csv")
     #plot_coverage_set([f"fixed_{y_measure}.csv"], y_measure)
     #plot_coverage_set(["test.csv", "cs_fixed.csv"], y_measure)
-    plot_coverage_set(["window17.csv", f"fixed_{y_measure}.csv"], "SBS")
+    #plot_coverage_set(["window17.csv", f"fixed_{y_measure}.csv"], "SBS")

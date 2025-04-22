@@ -26,27 +26,19 @@ from scenario.parameter_setup import VSC_SAVE_DIR, device
 from scenario.pcn_model import *
 from gym_covid import *
 
-#
-Reward = "Reward"
-Reward_ARI = "Reward_ARI"
-Reward_ARH = "Reward_ARH"
-Reward_SB_W = "Reward_SB_W"
-Reward_SB_S = "Reward_SB_S"
-Reward_SB_L = "Reward_SB_L"
-Reward_SB_TOT = "Reward_SB_TOT"
-Reward_SBS = "Reward_SBS"
-Reward_ABFTA = "Reward_ABFTA"
+ARI = "ARI"
+ARH = "ARH"
+SB_L = "SB_L"
+SB_W = "SB_W"
+SB_S = "SB_S"
+SB = "SB"
+SBS = "SBS"
+ABFTA = "ABFTA"
 
-reward_indices = {
-    Reward_ARI: 0,
-    Reward_ARH: 1,
-    Reward_SB_W: 2,
-    Reward_SB_S: 3,
-    Reward_SB_L: 4,
-    Reward_SB_TOT: 5
-}
+ALL_REWARDS = [ARI, ARH, SB_W, SB_S, SB_L, SB, SBS, ABFTA]
+# Map each reward name to its index in the EpiEnv reward vector
+reward_indices = {o: i for i, o in enumerate(ALL_REWARDS)}
 
-ALL_REWARDS = [Reward_ARI, Reward_ARH, Reward_SB_W, Reward_SB_S, Reward_SB_L, Reward_SB_TOT, Reward_SBS, Reward_ABFTA]
 #
 ALL_OBJECTIVES = ALL_REWARDS + ALL_GROUP_NOTIONS + ALL_INDIVIDUAL_NOTIONS
 SORTED_OBJECTIVES = {o: i for i, o in enumerate(ALL_OBJECTIVES)}
@@ -54,12 +46,12 @@ SORTED_OBJECTIVES = {o: i for i, o in enumerate(ALL_OBJECTIVES)}
 #
 OBJECTIVES_MAPPING = {
     # Rewards
-    "R_ARI": Reward_ARI,
-    "R_ARH": Reward_ARH,
-    "R_SB_W": Reward_SB_W,
-    "R_SB_S": Reward_SB_S,
-    "R_SB_L": Reward_SB_L,
-    "R_SB_TOT": Reward_SB_TOT,
+    "ARI": ARI,
+    "ARH": ARH,
+    "R_SB_W": SB_W,
+    "R_SB_S": SB_S,
+    "R_SB_L": SB_L,
+    "SB": SB,
 
     # Group notions (over history)
     "SP": GroupNotion.StatisticalParity,
@@ -108,172 +100,23 @@ def get_objective(obj):
     return obj
 
 
-def create_job_env(args):
-    team_size = args.team_size
-    episode_length = args.episode_length
-    diversity_weight = args.diversity_weight
-    # Training environment
-    population_file = f'./scenario/job_hiring/data/{args.population}.csv'
-    if args.vsc == 0:
-        population_file = "." + population_file
-    applicant_generator = ApplicantGenerator(csv=population_file, seed=args.seed)
 
-    # Initialise and get features to ignore in distance metrics
-    if args.ignore_sensitive:
-        exclude_from_distance = (HiringFeature.age, HiringFeature.gender, HiringFeature.nationality,
-                                 HiringFeature.married)
-    else:
-        exclude_from_distance = ()
+def get_scaling(args):
+    scales = [800000, 10000, 50., 20, 50, 90, 4e6, 170]
+    scale = np.array(scales)
 
-    # Fairness
-    if args.combined_sensitive_attributes == 1:
-        sensitive_attribute = CombinedSensitiveAttribute([HiringFeature.gender, HiringFeature.nationality],
-                                                         sensitive_values=[Gender.female, Nationality.foreign],
-                                                         other_values=[Gender.male, Nationality.belgian])
-        inn_sensitive_features = [HiringFeature.gender.value]  # TODO
-    elif args.combined_sensitive_attributes == 2:
-        sensitive_attribute = [SensitiveAttribute(HiringFeature.gender, sensitive_values=Gender.female,
-                                                  other_values=Gender.male),
-                               SensitiveAttribute(HiringFeature.nationality, sensitive_values=Nationality.foreign,
-                                                  other_values=Nationality.belgian)]
-        inn_sensitive_features = [HiringFeature.gender.value, HiringFeature.nationality.value]
-    else:
-        sensitive_attribute = SensitiveAttribute(HiringFeature.gender, sensitive_values=Gender.female,
-                                                 other_values=Gender.male)  # TODO: abstract parameters
-        inn_sensitive_features = [HiringFeature.gender.value]
+    ref_points = [-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0, -80e6, -3400]
+    ref_point = np.array(ref_points)
 
-    # No bias
-    if args.bias == 0:
-        reward_biases = []
-    # Bias on gender
-    elif args.bias == 1:
-        reward_biases = [FeatureBias(features=[HiringFeature.gender], feature_values=[Gender.male], bias=0.1)]
-    # Bias on nationality and gender
-    elif args.bias == 2:
-        reward_biases = [FeatureBias(features=[HiringFeature.gender, HiringFeature.nationality],
-                                     feature_values=[Gender.male, Nationality.belgian], bias=0.1)]
+    scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 0.1]]).to(device)
 
-    # Create environment
-    env = JobHiringEnv(team_size=team_size, seed=args.seed, episode_length=episode_length,  # Required ep length for pcn
-                       diversity_weight=diversity_weight, applicant_generator=applicant_generator,
-                       reward_biases=reward_biases, exclude_from_distance=exclude_from_distance)
+    max_returns = [0, 0, 0, 0, 0, 0, 0, 0]
+    max_return = np.array(max_returns) / scale
 
-    return env, sensitive_attribute, inn_sensitive_features
-
-
-def create_fraud_env(args):
-    # the parameters for the simulation
-    params = parameters.get_default_parameters()  # TODO: abstract parameters
-    params['seed'] = args.seed
-    params['init_satisfaction'] = 0.9
-    params['stay_prob'] = [0.9, 0.6]
-    params['num_customers'] = 100
-    params['num_fraudsters'] = 10
-    # params['end_date'] = datetime(2016, 12, 31).replace(tzinfo=timezone('US/Pacific'))
-    # params['end_date'] = datetime(2016, 3, 31).replace(tzinfo=timezone('US/Pacific'))
-    # # TODO (90357 yearly) Used for min/max reward
-    # episode_length = np.sum(params["trans_per_year"]).astype(int) / 366 * (31 + 29 + 31)
-    # 1 week = +- 1728 transactions
-    num_transactions = args.n_transactions  # 1000
-    params['end_date'] = datetime(2016, 1, 7).replace(tzinfo=timezone('US/Pacific'))
-    # episode_length = np.sum(params["trans_per_year"]).astype(int) / 366 * (7)  # (90357) Used for min/max reward
-    episode_length = num_transactions
-    if args.fraud_proportion != 0:
-        curr_sum = np.sum(params['trans_per_year'])
-        params['trans_per_year'] = np.array([curr_sum * (1 - args.fraud_proportion),
-                                             curr_sum * args.fraud_proportion])
-
-    # Initialise and get features to ignore in distance metrics
-    if args.ignore_sensitive:
-        exclude_from_distance = (FraudFeature.continent, FraudFeature.country, FraudFeature.card_id)
-    else:
-        exclude_from_distance = ()
-
-    # TODO: abstract parameters
-    # Continents mapping from default parameters: {'EU': 0, 'AS': 1, 'NA': 2, 'AF': 3, 'OC': 4, 'SA': 5}
-    # sensitive_attribute = SensitiveAttribute(FraudFeature.continent, sensitive_values=1, other_values=0)
-    # NA vs EU instead of AS vs EU to increase population size in both
-    if args.combined_sensitive_attributes == 1:
-        sensitive_attribute = CombinedSensitiveAttribute([FraudFeature.continent, FraudFeature.merchant_id],
-                                                         sensitive_values=[2, 6],
-                                                         other_values=[0, None])
-        inn_sensitive_features = [FraudFeature.continent.value]  # TODO
-    elif args.combined_sensitive_attributes == 2:
-        sensitive_attribute = [SensitiveAttribute(FraudFeature.continent, sensitive_values=2,
-                                                  other_values=0),
-                               SensitiveAttribute(FraudFeature.merchant_id, sensitive_values=6,
-                                                  other_values=None)]
-        inn_sensitive_features = [FraudFeature.continent.value, FraudFeature.continent.merchant_id]
-    else:
-        sensitive_attribute = SensitiveAttribute(FraudFeature.continent, sensitive_values=2, other_values=0)
-        inn_sensitive_features = [FraudFeature.continent.value]
-
-    # No bias
-    if args.bias == 0:
-        reward_biases = []
-    # Bias on gender
-    elif args.bias == 1:
-        reward_biases = [FeatureBias(features=[FraudFeature.continent], feature_values=[0], bias=0.1)]
-    # Bias on nationality and gender
-    elif args.bias == 2:
-        reward_biases = [FeatureBias(features=[FraudFeature.continent, FraudFeature.merchant_id],
-                                     feature_values=[0, 0], bias=0.1)]  # TODO: which merchant to target
-
-    transaction_model = TransactionModel(params, seed=args.seed)
-    env = TransactionModelMDP(transaction_model, do_reward_shaping=True, num_transactions=num_transactions,
-                              exclude_from_distance=exclude_from_distance, reward_biases=reward_biases)
-
-    return env, sensitive_attribute, inn_sensitive_features
-
-
-def get_scaling(rewards_to_keep, fairness_notions):
-    if len(rewards_to_keep) == 2:
-        if len(fairness_notions) == 1:
-            fn = fairness_notions[0]
-            if fn == IndividualNotion.SocialBurdenScore:
-                scale = np.array([10000, 4e6])
-                ref_point = np.array([-200000, -80e6]) / scale
-                scaling_factor = torch.tensor([[1, 1, 0.1]]).to(device)
-                max_return = np.array([0, 0]) / scale
-            elif fn == IndividualNotion.AgeBasedFairnessThroughUnawareness:
-                scale = np.array([10000, 170])
-                ref_point = np.array([-200000, -3400]) / scale
-                scaling_factor = torch.tensor([[1, 1, 0.1]]).to(device)
-                max_return = np.array([0, 0]) / scale
-        else:
-            scale = np.array([10000, 90])
-            ref_point = np.array([-200000, -1000.0]) / scale
-            scaling_factor = torch.tensor([[1, 1, 0.1]]).to(device)
-            max_return = np.array([0, 0]) / scale
-    elif len(rewards_to_keep) == 3:
-        scale = np.array([10000, 100, 4e6])
-        ref_point = np.array([-200000, -1000.0, -80e6]) / scale
-        scaling_factor = torch.tensor([[1, 1, 1]]).to(device)
-        max_return = np.array([0, 0, 0]) / scale
-
-    elif len(rewards_to_keep) == 4:
-        scale = np.array([10000, 90, 170, 4e6])
-        ref_point = np.array([-200000, -1000.0, -3400, -80e6]) / scale
-        scaling_factor = torch.tensor([[1, 1, 1, 1]]).to(device)
-        max_return = np.array([0, 0, 0, 0]) / scale
-
-    elif len(rewards_to_keep) == 6:
-        scale = np.array([800000, 10000, 50., 20, 50, 90])
-        ref_point = np.array([-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0]) / scale
-        scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 0.1]]).to(device)
-        max_return = np.array([0, 0, 0, 0, 0, 0]) / scale
-    elif len(rewards_to_keep) == 5:
-        scale = np.array([10000, 50., 20, 50, 90])
-        ref_point = np.array([-200000, -1000.0, -1000.0, -1000.0, -1000.0]) / scale
-        scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 0.1]]).to(device)
-        max_return = np.array([0, 0, 0, 0, 0]) / scale
-    else:
-        scale = np.array([10000, 50., 20, 50])  # np.array([800000, 10000, 50., 20, 50, 90])
-        ref_point = np.array([-200000, -1000.0, -1000.0,
-                              -1000.0]) / scale  # np.array([-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0]) / scale
-        scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 0.1]]).to(device)
-        max_return = np.array([0, 0, 0, 0]) / scale  # np.array([0, 0, 0, 0, 0, 0]) / scale
-
+    print(scale)
+    print(ref_point)
+    print(scaling_factor)
+    print(max_return)
     return scale, ref_point, scaling_factor, max_return
 
 
@@ -289,8 +132,7 @@ def create_fair_covid_env(args, rewards_to_keep, fairness_notions):
         with_budget = True
         budget = f'Budget{args.budget}'
 
-    scale, ref_point, scaling_factor, max_return = get_scaling(rewards_to_keep, fairness_notions)
-    print(f"SF: {scaling_factor}")
+    scale, ref_point, scaling_factor, max_return = get_scaling(args)
 
     lockdown = True
     if lockdown:
@@ -331,9 +173,10 @@ def create_fair_covid_env(args, rewards_to_keep, fairness_notions):
 
 
 def create_covid_model(args, nA, scaling_factor, ss, se, sa, with_budget):
-    with_budget = args.budget is not 0
+    with_budget = args.budget != 0
     # model = CovidModel(nA, scaling_factor, tuple(args.objectives), ss, se, sa, with_budget=with_budget).to(device)
     model = CovidModel(nA, scaling_factor, tuple(args.objectives), ss, se, sa, with_budget=with_budget).to(device)
+
     args.action = 'continuous'
     if args.action == 'discrete':
         model = DiscreteHead(model)
@@ -352,16 +195,6 @@ def create_fairness_framework_env(args):
         result_dir = VSC_SAVE_DIR
     else:
         result_dir = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/experiments/results"
-    is_job_hiring = False
-
-    # Job hiring
-    # if is_job_hiring:
-    #     logdir = f"{result_dir}/job_hiring/"
-    #     env, sensitive_attribute, inn_sensitive_features = create_job_env(args)
-    # # Fraud
-    # else:
-    #     logdir = f"{result_dir}/fraud_detection/"
-    #     env, sensitive_attribute, inn_sensitive_features = create_fraud_env(args)
 
     #
     logdir = f"{result_dir}/covid/{args.log_dir}"
@@ -376,28 +209,18 @@ def create_fairness_framework_env(args):
 
     # Check for concatenated arguments for objectives and compute objectives
     _sep = ":"
-
-    string_obj = args.objectives
-
     if len(args.objectives) == 1 and _sep in args.objectives[0]:
         args.objectives = args.objectives[0].split(_sep)
     if len(args.compute_objectives) == 1 and _sep in args.compute_objectives[0]:
         args.compute_objectives = args.compute_objectives[0].split(_sep)
 
-    chosen_rewards = [OBJECTIVES_MAPPING[obj] for obj in args.objectives
-                      if obj.startswith("R_")]  # e.g. ["Reward_ARH","Reward_SB_W","Reward_SB_S","Reward_SB_L"]
-
-    rewards_to_keep = [reward_indices[r] for r in chosen_rewards]
-
-    if args.compute_objectives:
-        all_args_objectives = args.objectives + args.compute_objectives
-    else:
-        all_args_objectives = args.objectives
+    all_args_objectives = args.objectives + args.compute_objectives
     ordered_objectives = sorted(all_args_objectives,
                                 key=lambda o: SORTED_OBJECTIVES[get_objective(OBJECTIVES_MAPPING[o])])
-    args.objectives = [i for i, o in enumerate(ordered_objectives) if o in args.objectives]
+    #args.objectives = [i for i, o in enumerate(ordered_objectives) if o in args.objectives]
 
-    # Check for concatenated distance metrics
+    args.objectives = [reward_indices[o] for o in args.objectives]
+
     ind_notions = [n for n in all_args_objectives if isinstance(get_objective(OBJECTIVES_MAPPING[n]), IndividualNotion)]
     if len(args.distance_metrics) == 1:
         if _sep in args.distance_metrics[0]:
@@ -412,11 +235,19 @@ def create_fairness_framework_env(args):
     mapped_ordered_notions = [OBJECTIVES_MAPPING[n] for n in ordered_objectives]
     all_group_notions = [n for n in mapped_ordered_notions if isinstance(n, GroupNotion)]
     all_individual_notions = [n for n in mapped_ordered_notions if isinstance(n, IndividualNotion)]
+
+    print("OBJECTIVES:", args.objectives)
+    print("COMPUTE OBJECTIVES:", args.compute_objectives)
+    print("ORDERED OBJECTIVES:", ordered_objectives)
+    print("ALL ARGS OBJECTIVES:", all_args_objectives)
+    print("IND NOTIONS:", all_individual_notions)
+    print("GROUP NOTIONS:", all_group_notions)
+    print("MAPPED ORDERED:", mapped_ordered_notions)
     sensitive_attribute = []
     fairness_framework = FairnessFramework([a for a in HiringActions], sensitive_attribute,
                                            individual_notions=all_individual_notions,
                                            group_notions=all_group_notions,
-                                           similarity_metric=None,  # env.similarity_metric,
+                                           similarity_metric=[],
                                            distance_metrics=args.distance_metrics,
                                            alpha=args.fair_alpha,
                                            window=args.window,
@@ -472,7 +303,7 @@ def create_fairness_framework_env(args):
 
     wandb.login(key='d013457b05ccb7e9b3c54f86806d3bd4c7f2384a')
 
-    wandb.init(group=f"SBS_window_{args.window}_scaling_{scale}runs_{string_obj}_budget:{args.budget}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
+    wandb.init(group=f"SBS_window_{args.window}_scaling_{scale}runs_{all_args_objectives}_budget:{args.budget}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
 
     return env, model, logdir, ref_point, scaling_factor, max_return
 
@@ -526,7 +357,7 @@ fMDP_parser.add_argument('--wandb', default=1, type=int,
                          help="(Ignored, overrides to 0) use wandb for loggers or save local only")
 fMDP_parser.add_argument('--no_window', default=0, type=int, help="Use the full history instead of a window")
 fMDP_parser.add_argument('--no_individual', default=0, type=int, help="No individual fairness notions")
-fMDP_parser.add_argument('--distance_metrics', default=['none'], type=str, nargs='*',
+fMDP_parser.add_argument('--distance_metrics', default=['kl', 'kl'], type=str, nargs='*',
                          help='The distance metric to use for every individual fairness notion specified. '
                               'The distance metrics should be supplied for each individual fairness in the objectives, '
                               'then followed by computed objectives. Can be supplied as a single string, with the '

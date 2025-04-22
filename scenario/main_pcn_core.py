@@ -2,6 +2,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import sys
+import warnings
 sys.path.append("./")  # for command-line execution to find the other packages (e.g. envs)
 
 from agent.pcn.pcn import train_fair_covid
@@ -15,6 +16,8 @@ from loggers.logger import AgentLogger, LeavesLogger, TrainingPCNLogger, EvalLog
 from scenario.fraud_detection.env import NUM_FRAUD_FEATURES
 from scenario.job_hiring.env import NUM_JOB_HIRING_FEATURES
 import wandb
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 
 
 def run_episode_fairness(env, model, desired_return, desired_horizon, max_return, agent_logger, discount_history_logger,

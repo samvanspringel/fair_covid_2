@@ -551,9 +551,12 @@ class IndividualFairness(IndividualFairnessBase):
         fairness_window = 0
         states, actions, true_actions, scores, rewards = history.get_history()
 
-        if isinstance(distance_metric, str) and distance_metric == "kl":
+        if isinstance(distance_metric, tuple):
+            distance_metric = distance_metric[0]
+
+        if distance_metric == "kl":
             distance_metric = kl_divergence
-        if isinstance(distance_metric, str) and distance_metric == "hellinger":
+        elif distance_metric == "hellinger":
             distance_metric = hellinger
 
         for state_df, C_diff in states:

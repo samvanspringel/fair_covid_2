@@ -1,22 +1,22 @@
 import numpy as np
 import gym
-import pandas as pd
 from gym.spaces import Box
 import datetime
+import pandas as pd
 
 
 def gradual_compliance_weights(t, beta_0, beta_1):
-    x = beta_0 + beta_1*t
-    w1 = np.minimum(1, np.exp(x)/(1+np.exp(x)))
-    w0 = 1-w1
+    x = beta_0 + beta_1 * t
+    w1 = np.minimum(1, np.exp(x) / (1 + np.exp(x)))
+    w0 = 1 - w1
     return w0, w1
 
 
 def school_holidays(C, C_current, C_target):
     # schools are closed, 0% school contacts
-    C[3] = C[3]*0.
-    C_current[3] = C_current[3]*0.
-    C_target[3] = C_target[3]*0.
+    C[3] = C[3] * 0.
+    C_current[3] = C_current[3] * 0.
+    C_target[3] = C_target[3] * 0.
     return C, C_current, C_target
 
 
@@ -31,7 +31,7 @@ class EpiEnv(gym.Env):
         self.K = len(N)
         self.N = N.sum()
         # contact matrix
-        self.C = np.ones((1, self.K, self.K)) if C is None else C
+        self.C = np.ones((1, K, K)) if C is None else C
         # factors of contact matrix for symptomatic people, reshape to match C shape
         self.C_sym_factor = np.array([1., 0.09, 0.13, 0.09, 0.06, 0.25])[:, None, None]
         self.C_full = self.C.copy()
@@ -40,7 +40,8 @@ class EpiEnv(gym.Env):
         self.beta_1 = beta_1
 
         # the observation space are compartments x age_groups
-        self.observation_space = Box(low=np.zeros((model.n_comp, self.K)), high=np.tile(N, (model.n_comp, 1)), dtype=np.float32)
+        self.observation_space = Box(low=np.zeros((model.n_comp, self.K)), high=np.tile(N, (model.n_comp, 1)),
+                                     dtype=np.float32)
         # action space is proportional reduction of work, school, leisure
         self.action_space = Box(low=np.zeros(3), high=np.ones(3), dtype=np.float32)
         # reward_space is attack-rate for infections, hospitalizations and reduction in social contact
@@ -56,8 +57,8 @@ class EpiEnv(gym.Env):
                                            (datetime.date(2020, 11, 2), datetime.date(2020, 11, 8)),
                                            (datetime.date(2020, 12, 21), datetime.date(2021, 1, 3))):
             # enforce holiday-event (0% school contacts) every day of school-holiday
-            for i in range((holiday_end-holiday_start).days+1):
-                day = holiday_start+datetime.timedelta(days=i)
+            for i in range((holiday_end - holiday_start).days + 1):
+                day = holiday_start + datetime.timedelta(days=i)
                 self.events[day] = school_holidays
 
         self.previous_state = None
@@ -74,10 +75,10 @@ class EpiEnv(gym.Env):
     def step(self, action):
         # action is a 3d continuous vector
         p_w, p_s, p_l = action
-        
+
         # match all C components, reshape to match C shape
         p = np.array([1, p_w, p_w, p_s, p_l, p_l])[:, None, None]
-        C_target = self.C*p
+        C_target = self.C * p
 
         s = self.model.current_state.copy()
         self.previous_state = self.model.current_state.copy()
@@ -92,7 +93,7 @@ class EpiEnv(gym.Env):
             today = self.today + datetime.timedelta(days=day)
             if today in self.events:
                 C_full, C_c, C_t = self.events[today](self.C.copy(), self.current_C, C_target)
-                #C_full = C_full.sum(0)
+                # C_full = C_full.sum(0)
                 # today is a school holiday
                 event_n[day] = True
             else:
@@ -100,10 +101,10 @@ class EpiEnv(gym.Env):
 
             # gradual compliance, C_target is only reached after a number of days
             w0, w1 = gradual_compliance_weights(day, self.beta_0, self.beta_1)
-            
-            C_asym = C_c*w0 + C_t*w1
-            #C_asym = C.sum(axis=0)
-            C_sym = (C_asym*self.C_sym_factor)#.sum(axis=0)
+
+            C_asym = C_c * w0 + C_t * w1
+            # C_asym = C.sum(axis=0)
+            C_sym = (C_asym * self.C_sym_factor)  # .sum(axis=0)
 
             s_n = self.model.simulate_day(C_asym.sum(axis=0), C_sym.sum(axis=0))
             state_n[day] = s_n
@@ -118,11 +119,12 @@ class EpiEnv(gym.Env):
             R_s_n = s_n[self.model.R]
             # all combinations of age groups
             i, j = np.meshgrid(range(self.K), range(self.K))
-            C_diff = C_asym-C_full
+            C_diff = C_asym - C_full
             # divide by total population to get lost contacts/person, for each social environment
-            r_sr += (C_diff*S_s_n[None,i]*S_s_n[None,j] + C_diff*R_s_n[None,i]*R_s_n[None,j]).sum(axis=(1,2))/self.N
+            r_sr += (C_diff * S_s_n[None, i] * S_s_n[None, j] + C_diff * R_s_n[None, i] * R_s_n[None, j]).sum(
+                axis=(1, 2)) / self.N
 
-            # Compute the lost contacts for all age groups combined (as before):
+            # Lost contacts per age
             lost_matrix = (C_diff * S_s_n[None, i] * S_s_n[None, j]) + (C_diff * R_s_n[None, i] * R_s_n[None, j])
 
             # Also compute a new array storing these lost contacts by age group i.
@@ -139,21 +141,17 @@ class EpiEnv(gym.Env):
         # update date
         self.today = self.today + datetime.timedelta(days=self.days_per_timestep)
         # social reduction for work, school and leisure
-        r_sr_w = r_sr[1]+r_sr[2]
+        r_sr_w = r_sr[1] + r_sr[2]
         r_sr_s = r_sr[3]
-        r_sr_l = r_sr[4]+r_sr[5]
-
-        # TODO added for plotting
-        self.current_state_n = state_n[-1].T
-        self.current_action = action
-        self.current_events_n = event_n[-1]
-        self.lost_contacts = r_sr
+        r_sr_l = r_sr[4] + r_sr[5]
 
         # next-state , reward, terminal?, info
         # provide action as proxy for current SCM, impacts progression of epidemic
-        # return (state_n, event_n, action.copy()), np.array([r_ari, r_arh, r_sr_w, r_sr_s, r_sr_l]), False, {}
+        return (state_n, event_n, action.copy()), np.array([r_ari, r_arh, r_sr_w, r_sr_s, r_sr_l, r_sr.sum()]), False, \
+               {"ARI": r_ari, "ARH": r_arh, "R_SR_W": r_sr_w, "R_SR_S": r_sr_s, "R_SR_L": r_sr_l, "SB": r_sr.sum()}
+
         #return (state_n, event_n, action.copy()), np.array([r_arh, r_sr.sum()]), False, {"lost_contacts_per_age": r_sr_per_age}
-        return (state_n, event_n, action.copy()), np.array([r_arh]), False, {"lost_contacts_per_age": r_sr_per_age}
+        #return (state_n, event_n, action.copy()), np.array([r_ari, r_arh, r_sr_w, r_sr_s, r_sr_l]), False, {"lost_contacts_per_age": r_sr_per_age}
 
 
     def similarity_metric(self, state1, state2):

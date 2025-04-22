@@ -1,23 +1,13 @@
 import copy
 
+import warnings
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
 import numpy as np
 import gym
 
-
-class RewardSlicing(gym.Wrapper):
-    def __init__(self, env, reward_indices):
-        super().__init__(env)
-        self.reward_indices = reward_indices
-
-    def step(self, action):
-        obs, reward, done, info = self.env.step(action)
-        # slice out only the desired indices, e.g. [1,2,3,4]
-        # for (ARH, SB_W, SB_S, SB_L).
-        reward = reward[self.reward_indices]
-        return obs, reward, done, info
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 class MultiDiscreteAction(gym.ActionWrapper):
@@ -37,6 +27,8 @@ class ScaleRewardEnv(gym.RewardWrapper):
         self.scale = scale
 
     def reward(self, reward):
+        print("Reward:", reward)
+        print("Scale:", self.scale)
         return (reward - self.min) / self.scale
 
 
@@ -60,8 +52,8 @@ class TodayWrapper(gym.Wrapper):
         s, r, d, i = super(TodayWrapper, self).step(action)
         # sum all the social burden objectives together:
         # TODO temp remove
-        #p_tot = r[2:].sum()
-        #r = np.concatenate((r, p_tot[None]))
+        # p_tot = r[2:].sum()
+        # r = np.concatenate((r, p_tot[None]))
         if len(s) == 4:
             sb, ss, se, sa = s
             s = (sb, ss[-1].T, se[-1], sa)
@@ -166,7 +158,8 @@ class CovidModel(nn.Module):
                  sa_emb,
                  with_budget=False):
         super(CovidModel, self).__init__()
-        self.scaling_factor = scaling_factor[:, objectives + (len(scaling_factor) - 1,)]
+        self.scaling_factor = scaling_factor[:,objectives + (len(scaling_factor)-1,)]
+
         self.objectives = objectives
         self.ss_emb = ss_emb
         self.se_emb = se_emb
