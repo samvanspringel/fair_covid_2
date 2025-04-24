@@ -1,5 +1,6 @@
 from loggers import LogEntry
-
+import json
+import numpy as np
 
 class AgentLogger(LogEntry):
     """A log entry containing data per timestep for an agent."""
@@ -100,8 +101,11 @@ class TrainingPCNLogger(LogEntry):
             self.horizon_distance: horizon_distance,
             self.episode_steps: episode_steps,
             self.hypervolume: hypervolume,
-            self.coverage_set: coverage_set,
-            self.nd_coverage_set: nd_coverage_set
+
+            self.coverage_set: json.dumps(coverage_set.tolist()) if isinstance(coverage_set, np.ndarray) else coverage_set,
+            self.nd_coverage_set: json.dumps(nd_coverage_set.tolist()) if isinstance(nd_coverage_set,
+                                                                                     np.ndarray) else nd_coverage_set
+
         }
         for i, o in enumerate(self.objectives):
             entry[f"return_{o}_value"] = return_values[o]

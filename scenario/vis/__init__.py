@@ -6,6 +6,7 @@ import pandas as pd
 from fairness.group import GroupNotion
 from fairness.individual import IndividualNotion
 from scenario.create_fair_env import OBJECTIVES_MAPPING as env_OBJ_MAP
+from scenario.create_fair_env import reward_indices
 
 group_type = "G"
 ind_type = "I"
@@ -20,62 +21,91 @@ def get_id(*args):
     return "_".join([str(a) for a in args])
 
 
-def load_pcn_log(results_dir, is_fraud, steps, population, bias, distance, window, objectives, compute_objectives, seed,
+def load_pcn_log(results_dir, is_fraud, steps, budget, bias, distance, window, objectives, compute_objectives, seed,
                  overwrite_dir=None, reverse=False):
     if overwrite_dir:
         exp_dir = f"{overwrite_dir}/seed_{seed}"
     else:
-        exp_dir = results_dir if is_fraud else f"{results_dir}/population_{population}/"
-        exp_dir += f"/bias_{bias}/steps_{steps}/objectives_{':'.join(objectives)}_{':'.join(compute_objectives)}/" \
-                   f"distance_metric_{distance}/window_{window}/seed_{seed}/"
+        exp_dir = results_dir if is_fraud else f"{results_dir}/budget_{budget}/"
+        exp_dir += f"seed_{seed}/"
     all_runs = sorted([filename for filename in os.listdir(exp_dir) if filename.startswith("202")], reverse=reverse)
     f = f"{exp_dir}/{all_runs[0]}/pcn_log.csv"
-    df = pd.read_csv(f, index_col=None)
+    df = pd.read_csv(f, index_col=None, engine='python')
     return df
 
 
 def load_pcn_dataframes(requested_objectives, computed_objectives, all_objectives, sorted_objectives,
                         seeds, steps, pcn_idx, base_results_dir, is_fraud, n_transactions, fraud_proportion, team_size,
                         populations, distances, windows, biases):
-    env_name = "fraud_detection" if is_fraud else "job_hiring"
-    base_results_dir += f"{env_name}/"
-    if is_fraud:
-        base_results_dir += f"/n_transactions_{n_transactions}/fraud_proportion_{fraud_proportion}/"
-    else:
-        base_results_dir += f"/team_{team_size}/"
+    # env_name = "fraud_detection" if is_fraud else "job_hiring"
+    # base_results_dir += f"{env_name}/"
+    # if is_fraud:
+    #     base_results_dir += f"/n_transactions_{n_transactions}/fraud_proportion_{fraud_proportion}/"
+    # else:
+    #     base_results_dir += f"/team_{team_size}/"
     results_dir = base_results_dir
 
+    budgets = [0, 2, 3, 4, 5]
+
     all_dataframes = []
-    for population, population_name in populations.items():
-        for bias, bias_name in biases.items():
-            for distance, distance_name in distances.items():
-                for window, window_name in windows.items():
-                    for obj, cobj in zip(requested_objectives, computed_objectives):
-                        objectives_indices = [sorted_objectives[o] for o in obj]
-                        is_single = len(obj) == 1
-                        pcn_logs = []
-                        # Load in all seeds per experiment
-                        for seed in seeds:
-                            print("Exp.", population, bias, distance, window, obj, cobj, seed, f"is_single={is_single}")
-                            df = load_pcn_log(results_dir, is_fraud, steps, population, bias, distance,
-                                              window, obj, cobj, seed, reverse=len(distances) < 2)
-                            pcn_logs.append(df)
-                        # Get coverage sets
-                        cs, ndcs = get_coverage_sets(pcn_logs, objectives_indices, is_single, idx=pcn_idx)
-                        dfs = [pd.DataFrame(s, columns=all_objectives) for s in ndcs]
-                        for seed, df in zip(seeds, dfs):
-                            df["seed"] = seed
-                            df["population"] = population
-                            df["bias"] = bias
-                            df["distance"] = distance
-                            df["window"] = window
-                            df["objectives"] = ":".join(obj)
-                            df_id = get_id(population, bias, distance, window, requested_objectives, seed)
-                            df["id"] = df_id
-                        df_ndcs = pd.concat(dfs, ignore_index=True)
-                        all_dataframes.append(df_ndcs)
+
+    for obj, cobj in zip(requested_objectives, computed_objectives):
+        for budget in budgets:
+            objectives_indices = [reward_indices[o] for o in obj]
+            co = [reward_indices[o] for o in cobj]
+            objectives_indices.extend(co)
+            is_single = len(obj) == 1
+            pcn_logs = []
+            # Load in all seeds per experiment
+            for seed in seeds:
+                print("Exp.", budget, obj, cobj, seed)
+                df = load_pcn_log(results_dir, is_fraud, steps, budget, "", "",
+                                  "", obj, cobj, seed, reverse=len(distances) < 2)
+                pcn_logs.append(df)
+            # Get coverage sets
+            cs, ndcs = get_coverage_sets(pcn_logs, objectives_indices, is_single, idx=pcn_idx)
+            dfs = [pd.DataFrame(s, columns=all_objectives) for s in ndcs]
+            for seed, df in zip(seeds, dfs):
+                df["seed"] = seed
+                df["budget"] = budget
+                df_id = get_id("", "", "", "", requested_objectives, seed)
+                df["id"] = df_id
+            df_ndcs = pd.concat(dfs, ignore_index=True)
+            all_dataframes.append(df_ndcs)
     full_df = pd.concat(all_dataframes, ignore_index=True)
     return full_df, results_dir
+    #
+    # all_dataframes = []
+    # for population, population_name in populations.items():
+    #     for bias, bias_name in biases.items():
+    #         for distance, distance_name in distances.items():
+    #             for window, window_name in windows.items():
+    #                 for obj, cobj in zip(requested_objectives, computed_objectives):
+    #                     objectives_indices = [sorted_objectives[o] for o in obj]
+    #                     is_single = len(obj) == 1
+    #                     pcn_logs = []
+    #                     # Load in all seeds per experiment
+    #                     for seed in seeds:
+    #                         print("Exp.", population, bias, distance, window, obj, cobj, seed, f"is_single={is_single}")
+    #                         df = load_pcn_log(results_dir, is_fraud, steps, population, bias, distance,
+    #                                           window, obj, cobj, seed, reverse=len(distances) < 2)
+    #                         pcn_logs.append(df)
+    #                     # Get coverage sets
+    #                     cs, ndcs = get_coverage_sets(pcn_logs, objectives_indices, is_single, idx=pcn_idx)
+    #                     dfs = [pd.DataFrame(s, columns=all_objectives) for s in ndcs]
+    #                     for seed, df in zip(seeds, dfs):
+    #                         df["seed"] = seed
+    #                         df["population"] = population
+    #                         df["bias"] = bias
+    #                         df["distance"] = distance
+    #                         df["window"] = window
+    #                         df["objectives"] = ":".join(obj)
+    #                         df_id = get_id(population, bias, distance, window, requested_objectives, seed)
+    #                         df["id"] = df_id
+    #                     df_ndcs = pd.concat(dfs, ignore_index=True)
+    #                     all_dataframes.append(df_ndcs)
+    # full_df = pd.concat(all_dataframes, ignore_index=True)
+    # return full_df, results_dir
 
 
 def get_splits(env_name, populations, distances, windows, biases, requested_objectives):
@@ -182,7 +212,10 @@ def get_coverage_sets(pcn_dfs, objectives_indices, is_single, idx=None):
 
     for pi, pcn_df in enumerate(pcn_dfs):
         try:
+            print(pcn_df.head(1))
             coverage_set = _read_2d_array(pcn_df, "coverage_set", idx)
+            print(type(coverage_set), coverage_set.shape)
+            print(coverage_set)
             nd_coverage_set = _read_2d_array(pcn_df, "nd_coverage_set", idx)
         except IndexError as e:
             full_nd_coverage_set = np.zeros(shape=(1, len(objectives_indices)))
@@ -190,6 +223,9 @@ def get_coverage_sets(pcn_dfs, objectives_indices, is_single, idx=None):
             nd_coverage_sets.append(full_nd_coverage_set)
             continue
 
+        print(coverage_set)
+        print(coverage_set.shape)
+        exit(1)
         len_objs = coverage_set.shape[1]
         full_nd_coverage_set = np.zeros(shape=(len(nd_coverage_set), len_objs))
         for i, nd in enumerate(nd_coverage_set):

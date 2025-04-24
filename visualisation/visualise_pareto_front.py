@@ -48,15 +48,16 @@ def load_runs_from_logdir(logdir):
     logdir_path = Path(logdir)
     runs = []
     for path in logdir_path.rglob('log.h5'):
+        print(path)
         with h5py.File(path, 'r') as logfile:
             pareto_front = logfile['train/leaves/ndarray'][-1]
-            _, pareto_front_i = non_dominated(pareto_front[:, [0, 1]], return_indexes=True)
-            pf = pareto_front[pareto_front_i]
+            _, pareto_front_i = non_dominated(pareto_front[:, [1, 5]], return_indexes=True)
+            pareto_front = pareto_front[pareto_front_i]
 
-            # pf = pf[pf[:, 1] >= extreme_y_threshold]
-            pf = pf[np.argsort(pf[:, 0])]  # sort by first dimension (objective 0)
-
-            runs.append({'pareto_front': pf})
+            pf = np.argsort(pareto_front, axis=0)
+            pareto_front = pareto_front[pf[:, 1]]
+            pareto_front = pareto_front[:, [1, 5]]
+            runs.append({'pareto_front': pareto_front})
     return runs
 
 def plot_fixed_data(measure):
@@ -94,12 +95,11 @@ def plot_pareto_front_from_dir(measure, logdir, budget_label, scale_x=10000, sca
     for run in runs:
         pf = run['pareto_front']
         pf = np.unique(pf, axis=0)
-        pf = non_dominated(pf)
+        #pf = non_dominated(pf)
         # Filter out points with y (second column) below the threshold.
-        pf = pf[pf[:, 1] >= extreme_y_threshold]
+        #pf = pf[pf[:, 1] >= extreme_y_threshold]
         if pf.size == 0:
             continue  # Skip this run if all points are filtered out
-        pf = pf[np.argsort(pf[:, 0])]  # sort by first dimension (objective 0)
         sorted_runs.append(pf)
 
     if not sorted_runs:
@@ -163,7 +163,6 @@ def make_budget_plots(measure, scale_x, scale_y):
     plt.rcParams["figure.figsize"] = (17, 15)
     # Suppose you have budgets 0..5:
     all_budgets = [0, 2, 3, 4, 5]
-    #all_budgets = [2, 3, 4, 5]
     # We'll store the (x_vals, mean_curve, std_curve) in a dict
     results_dict = {}
 
@@ -625,7 +624,7 @@ def get_scaling_plot(measure):
 
 
 if __name__ == "__main__":
-    measure = "sbs"
+    measure = "sb"
     scale_x, scale_y = get_scaling_plot(measure)
     make_budget_plots(measure, scale_x, scale_y)
     # print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")

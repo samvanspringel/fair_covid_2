@@ -172,15 +172,15 @@ def generate_fixed_coverage_set_new(env, fairness, amount_of_policies=100):
 
 
 if __name__ == '__main__':
-    y_measure = "sbs"
-    env = gym.make(f'BECovidWithLockdownODEContinuous-v0')
-    coverage_set = generate_fixed_coverage_set_new(env, y_measure, amount_of_policies=100)
-
-
-    # Create a DataFrame and save as a CSV file:
-    df = pd.DataFrame(coverage_set, columns=["hospitalizations", "measure"])
-    df.to_csv(f"fixed_{y_measure}.csv", index=False)
-    print(f"Saved fixed policies in fixed_{y_measure}.csv")
+    y_measure = "sb"
+    # env = gym.make(f'BECovidWithLockdownODEContinuous-v0')
+    # coverage_set = generate_fixed_coverage_set_new(env, y_measure, amount_of_policies=100)
+    #
+    #
+    # # Create a DataFrame and save as a CSV file:
+    # df = pd.DataFrame(coverage_set, columns=["hospitalizations", "measure"])
+    # df.to_csv(f"fixed_{y_measure}.csv", index=False)
+    # print(f"Saved fixed policies in fixed_{y_measure}.csv")
     #plot_coverage_set([f"fixed_{y_measure}.csv"], y_measure)
-    #plot_coverage_set(["test.csv", "cs_fixed.csv"], y_measure)
+    plot_coverage_set(["testcov.csv", "fixed_sb.csv"], y_measure)
     #plot_coverage_set(["window17.csv", f"fixed_{y_measure}.csv"], "SBS")
