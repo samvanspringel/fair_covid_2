@@ -159,7 +159,7 @@ def plot_pareto_front_from_dir(measure, logdir, budget_label, scale_x=10000, sca
 
 def make_budget_plots(measure, scale_x, scale_y):
     # The top-level folder containing budget_{i} subdirs
-    BASELINE_DIR = f"/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/agent/pcn/{measure}_results"
+    BASELINE_DIR = f"/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/Results/{measure}_results"
     plt.rcParams["figure.figsize"] = (17, 15)
     # Suppose you have budgets 0..5:
     all_budgets = [0, 2, 3, 4, 5]
