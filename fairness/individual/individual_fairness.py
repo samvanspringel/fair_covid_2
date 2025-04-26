@@ -587,7 +587,7 @@ class IndividualFairness(IndividualFairnessBase):
             reduction_impact = get_reduction_impact(C_diff)          # shape (K, 6)
             risks = state_df["h_risk"].values                       # shape (K,)
             # compute pairwise risk-normalized distances
-            print("C_DIFF", C_diff)
+            #print("C_DIFF", C_diff)
             D = risk_normalized_distance_matrix(reduction_impact, risks, metric="euclidean")
             # accumulate fairness as sum of distances (zero means perfect proportionality)
             fairness_window += np.sum(D)

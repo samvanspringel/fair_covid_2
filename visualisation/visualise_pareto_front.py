@@ -58,7 +58,7 @@ def load_runs_from_logdir(logdir, objectives):
 
             pf = np.argsort(pareto_front, axis=0)
             pareto_front = pareto_front[pf[:, 0]]
-            pareto_front = pareto_front[:, [1, 5]]
+            pareto_front = pareto_front[:, [1, 6]]
             runs.append({'pareto_front': pareto_front})
     return runs
 
@@ -66,7 +66,7 @@ def plot_fixed_data(measure):
     """
     Reads in fixed.csv (assumes two columns: x and y) and plots its data using plt.scatter.
     """
-    measure = "sb"
+    measure = "sbs"
     df_fixed = pd.read_csv(f"fixed_{measure}.csv")
     # Check if mean of first column > 3000, and scale if needed
     if 'o_0' in df_fixed.columns and 'o_1' in df_fixed.columns:
@@ -576,7 +576,7 @@ def main(run_episodes=False):
 
 
 def get_scaling_plot(measure):
-    return 10000, 90
+    return 10000, 4e6
     if measure == "sb":
         return 10000, 90
     elif measure == "sbs":
@@ -586,8 +586,8 @@ def get_scaling_plot(measure):
 
 
 if __name__ == "__main__":
-    # measure = "sbs"
-    # scale_x, scale_y = get_scaling_plot(measure)
-    # make_budget_plots(measure, scale_x, scale_y)
-    run_episodes = True
-    main(run_episodes)
+    measure = "sbs"
+    scale_x, scale_y = get_scaling_plot(measure)
+    make_budget_plots(measure, scale_x, scale_y)
+    # run_episodes = True
+    # main(run_episodes)
