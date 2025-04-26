@@ -1,5 +1,4 @@
-from main_pcn import CovidModel, MultiDiscreteHead, DiscreteHead, ContinuousHead, ScaleRewardEnv, TodayWrapper, multidiscrete_env
-from pcn import non_dominated, Transition, choose_action, epsilon_metric
+from agent.pcn.pcn import non_dominated, Transition, choose_action, epsilon_metric
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,7 +15,37 @@ def run_episode(env, model, desired_return, desired_horizon, max_return):
     done = False
     while not done:
         action = choose_action(model, obs, desired_return, desired_horizon, eval=True)
-        n_obs, reward, done, _ = env.step(action)
+        n_obs, reward, done, info = env.step(action)
+        if 'action' in info:
+            action = info['action']
+
+        transitions.append(Transition(
+            observation=obs[1],
+            action=env.action(action),
+            reward=np.float32(reward).copy(),
+            next_observation=n_obs[1],
+            terminal=done
+        ))
+
+        obs = n_obs
+        # clip desired return, to return-upper-bound, 
+        # to avoid negative returns giving impossible desired returns
+        # reward = np.array((reward[1], reward[2]))
+        desired_return = np.clip(desired_return-reward, None, max_return, dtype=np.float32)
+        # clip desired horizon to avoid negative horizons
+        desired_horizon = np.float32(max(desired_horizon-1, 1.))
+    return transitions
+
+
+def run_fixed_episode(env, actions, desired_return, desired_horizon, max_return):
+    transitions = []
+    obs = env.reset()
+    done = False; step = 0
+    while not done:
+        action = actions[step]
+        n_obs, reward, done, info = env.step(action)
+        if 'action' in info:
+            action = info['action']
 
         transitions.append(Transition(
             observation=obs[0],
@@ -27,6 +56,7 @@ def run_episode(env, model, desired_return, desired_horizon, max_return):
         ))
 
         obs = n_obs
+        step += 1
         # clip desired return, to return-upper-bound, 
         # to avoid negative returns giving impossible desired returns
         # reward = np.array((reward[1], reward[2]))
@@ -59,12 +89,13 @@ def plot_episode(transitions, alpha=1.):
     ax.plot(i_hosp_new, alpha=alpha, label='hosp', color='blue')
     ax.plot(i_icu_new,  alpha=alpha, label='icu', color='green')
     ax.plot(i_hosp_new+i_icu_new, label='hosp+icu',  alpha=alpha, color='orange')
+    ax.plot(d_new, alpha=alpha, label='deaths', color='red')
     ax.set_xticks(ticks=np.arange(0, 18, 2), labels=[str(d.day)+'/'+str(d.month) for d in dates])
 
     # deaths
     ax = axs[1]
-    ax.plot(d_new, alpha=alpha, label='deaths', color='red')
-    # ax.plot(ari, alpha=alpha, label='ari', color='black')
+    # ax.plot(d_new, alpha=alpha, label='deaths', color='red')
+    ax.plot(ari, alpha=alpha, label='ari', color='black')
 
     # actions
     ax = axs[2]
@@ -82,7 +113,7 @@ def plot_episode(transitions, alpha=1.):
     return [start+week*i for i in range(0, 18, 1)], ari, i_hosp_new, i_icu_new, d_new, actions[:, 0], actions[:, 1], actions[:, 2]
 
 
-def eval_pcn(env, model, desired_return, desired_horizon, max_return, objectives, gamma=1., n=1):
+def eval_pcn(env, model, desired_return, desired_horizon, max_return, objectives, gamma=1., n=1, ode_env=None):
     plt.subplots(3, 1, sharex=True)
     alpha = 1 if n == 1 else 0.2
     returns = np.empty((n, desired_return.shape[-1]))
@@ -104,11 +135,20 @@ def eval_pcn(env, model, desired_return, desired_horizon, max_return, objectives
         df = pd.DataFrame([x for x in zip(*t)], columns=['dates', 'ari', 'i_hosp_new', 'i_icu_new', 'd_new', 'p_w', 'p_s', 'p_l'] + [f'o_{oi}' for oi in range(returns.shape[1])])
         # manually set p_s to 0 during school holidays
         holidays = df['dates'] >= datetime.date(2020, 7, 1)
-        df['p_s'][holidays] = 0
+        df.loc[holidays, 'p_s'] = 0
         all_transitions.append(df)
-    title = 'Re: '+ ' '.join([f'{o:.3f}' for o in (returns.mean(0)*env.scale)[objectives]])
+    # title = 'Re: '+ ' '.join([f'{o:.3f}' for o in (returns.mean(0)*env.scale)[objectives]])
+    title = 'Re: '+ ' '.join([f'{o:.3f}' for o in (returns.mean(0)*env.scale)])
     title += '\n'
     title += 'Rt: '+ ' '.join([f'{o:.3f}' for o in (desired_return*env.scale)[objectives]])
+    if ode_env is not None:
+        actions = [np.stack((df['p_w'], df['p_s'], df['p_l']), axis=-1) for df in all_transitions]
+        actions = np.mean(actions, axis=0)
+        transitions_fixed = run_fixed_episode(ode_env, actions, desired_return, desired_horizon, max_return)
+        t = plot_episode(transitions_fixed, 1)
+        return_ = np.sum([t.reward for t in transitions_fixed], axis=0)
+        title += '\nODE Re: '+ ' '.join([f'{o:.3f}' for o in (return_*env.scale)])
+        
     plt.suptitle(title)
     print(f'ran model with desired-return: {desired_return[objectives].flatten()}, got average return {returns[:,objectives].mean(0).flatten()}')
     return returns, all_transitions
@@ -133,79 +173,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
     model_dir = pathlib.Path(args.model)
 
-    log = model_dir / 'log.h5'
-    log = h5py.File(log)
-    checkpoints = [str(p) for p in model_dir.glob('model_10.pt')]
-    checkpoints = sorted(checkpoints)
-    model = torch.load(checkpoints[-1])
 
-    with log:
-        pareto_front = log['train/leaves/ndarray'][-1]
-        _, pareto_front_i = non_dominated(pareto_front[:,args.objectives], return_indexes=True)
-        pareto_front = pareto_front[pareto_front_i]
-
-        pf = np.argsort(pareto_front, axis=0)
-        pareto_front = pareto_front[pf[:,0]]
-        
-    env_type = 'ODE' if args.env == 'ode' else 'Binomial'
-
-    scale = np.array([800000, 10000, 50., 20, 50, 100])
-    ref_point = np.array([-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0])/scale
-    scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 0.1]]).to(device)
-    max_return = np.array([0, 0, 0, 0, 0, 0])/scale
-    # hacky, d for discrete, m for multidiscrete, c for continuous
-    action = str(model_dir)[str(model_dir).find('action')+7]
-    if action == 'd':
-        env = gym.make(f'BECovidWithLockdown{env_type}Discrete-v0')
-        nA = env.action_space.n
-    else:
-        env = gym.make(f'BECovidWithLockdown{env_type}Continuous-v0')
-        # env = gym.make(f'BECovidWithLockdownUntil2021{env_type}Continuous-v0')
-        if action == 'm':
-            env = multidiscrete_env(env)
-            nA = env.action_space.nvec.sum()
-        else:
-            nA = np.prod(env.action_space.shape)
-            env.action = lambda x: x
-    env = TodayWrapper(env)
-    env = ScaleRewardEnv(env, scale=scale)
-    print(env)
-
-    inp = -1
-    if not args.interactive:
-        (model_dir / 'policies-executions').mkdir(exist_ok=True)
-        print('='*38)
-        print('not interactive, this may take a while')
-        print('='*38)
-        all_returns = []
-    while True:
-        if args.interactive:
-            print('solutions: ')
-            for i, p in enumerate(pareto_front):
-                print(f'{i} : {p[args.objectives]}')
-            inp = input('-> ')
-            inp = int(inp)
-        else:
-            inp = inp+1
-            if inp >= len(pareto_front):
-                break
-        desired_return = pareto_front[inp]
-        desired_horizon = 17 #35
-
-        r, t = eval_pcn(env, model, desired_return, desired_horizon, max_return, args.objectives, n=args.n)
-        if args.interactive:
-            plt.show()
-        else:
-            plt.savefig(model_dir / 'policies-executions' / f'policy_{inp}.png')
-            for i, t_i in enumerate(t):
-                (model_dir / 'policies-transitions' / f'{inp}').mkdir(exist_ok=True, parents=True)
-                t_i.to_csv(model_dir / 'policies-transitions' / f'{inp}' / f'run_{i}.csv', index_label='index')
-            all_returns.append(r)
-    import pickle
-    with open(model_dir / 'returns.pkl', 'wb') as f:
-        all_returns = np.array(all_returns)
-        # compute e-metric
-        epsilon = epsilon_metric(all_returns.mean(axis=1), pareto_front)
-        print(f'epsilon-max: {epsilon.max()}')
-        print(f'epsilon-mean: {epsilon.mean()}')
-        pickle.dump(all_returns, f)
+    # import pickle
+    # with open(model_dir / 'returns.pkl', 'wb') as f:
+    #     all_returns = np.array(all_returns)
+    #     # compute e-metric
+    #     epsilon = epsilon_metric(all_returns.mean(axis=1), pareto_front)
+    #     print(f'epsilon-max: {epsilon.max()}')
+    #     print(f'epsilon-mean: {epsilon.mean()}')
+    #     pickle.dump(all_returns, f)

@@ -9,7 +9,7 @@ import sys
 import glob
 import pandas as pd
 
-#pre = sys.argv[1]
+pre = sys.argv[1]
 
 
 def baseline_runs(logdir):
@@ -52,8 +52,6 @@ def udrl_runs(logdir):
                     if rp in logdir:
                         ref_point = ref_points[rp]
                 # only keep points that dominate ref point
-                scale = np.array([10000, 90])
-                ref_point = np.array([-200000, -1000.0]) / scale
                 hv = []
                 for f in pf:
                     valid_points = f[np.all(f >= ref_point, axis=1)]
@@ -64,11 +62,11 @@ def udrl_runs(logdir):
                 steps = logfile['train/leaves/step']
                 hv = np.stack((steps, hv), axis=1)
             # best points found over training
-            #bp = non_dominated(np.concatenate(pf, axis=0))
+            # bp = non_dominated(np.concatenate(pf, axis=0))
             run = {
                 'pareto_front': pf[-1],
                 'hypervolume': hv[:],
-                #'best_points': bp
+                # 'best_points': bp
             }
             runs.append(run)
     return runs
@@ -127,6 +125,7 @@ def plot_pareto_front(all_runs, jitter=0.01):
     # plt.subplots(len(comb)//2, 2)
     plt.title('pareto front')
 
+
     nO = list(all_runs.values())[0][0]['pareto_front'].shape[-1]
     # if nO == 3:
     #     plt.gcf().add_subplot(111, projection='3d')
@@ -134,7 +133,7 @@ def plot_pareto_front(all_runs, jitter=0.01):
     #     print('aborting since more than 3 objectives')
     #     plt.close()
     #     return
-    cs = 0
+
     for k, v in all_runs.items():
         points = [run['pareto_front'] for run in v]
         selected = []
@@ -142,15 +141,12 @@ def plot_pareto_front(all_runs, jitter=0.01):
             p = np.unique(p, axis=0)
             selected = p if len(p) >= len(selected) else selected
         p = selected
-        print(len(p))
-        #print(p)
+        print(p)
         jittered_p = p # + np.random.normal(0, p.std(axis=0, keepdims=True)*jitter, size=p.shape)
         coords = list(zip(*jittered_p))
         # coords = np.array(coords)*np.array([[10000], [50],[50],[50]])
         coords = np.array(coords)*np.array([[10000], [100]])
-        print(coords.shape)
         coords = non_dominated(coords.T).T
-        print(coords.shape)
         # coords = np.concatenate((coords, coords[1:].sum(0, keepdims=True)), axis=0)
         # axs = plt.gcf().axes
         # for ax, c in zip(axs, comb):
@@ -169,13 +165,12 @@ def plot_pareto_front(all_runs, jitter=0.01):
         # coords = non_dominated(coords.T).T
 
         plt.gca().scatter(*coords, alpha=0.2, label=f'{k}')
-
         plt.xlabel('total number of daily-new-hospitalizations')
         plt.ylabel('social burden as cumulative contacts lost per person')
 
         df = pd.DataFrame(data=p, columns=[f'o{i}' for i in range(nO)])
         df.to_csv(f'/tmp/{k}.csv', index=False)
-    print("size", cs)
+    
     plt.legend()
     plt.show()
 
@@ -272,7 +267,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='plots')
     parser.add_argument('--logs', required=True, type=str, nargs='+')
     parser.add_argument('--algo', required=True, type=str, nargs='+', help='udrl, mones or ra')
-    parser.add_argument('--save-pf', type=str, default=None,
+    parser.add_argument('--save-pf', type=str, default=None, 
         help='get all best points across all selected runs, and save them to file')
     args = parser.parse_args()
 

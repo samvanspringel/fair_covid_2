@@ -51,6 +51,41 @@ def hellinger(p, q, num_actions):
     return h_dist
 
 
+# Helper for risk-normalized distance matrix
+def risk_normalized_distance_matrix(reduction_matrix: np.ndarray,
+                                    risks: np.ndarray,
+                                    metric: str = "euclidean",
+                                    eps: float = 1e-12) -> np.ndarray:
+    """
+    Scale each row by its group's risk and compute pairwise distances.
+    """
+    abs_mat = np.abs(reduction_matrix)
+    np.set_printoptions(precision=3, suppress=True, linewidth=200)
+    #print("Distance matrix D:\n", abs_mat)
+    scaled = abs_mat / (risks[:, None] + eps)
+    n = scaled.shape[0]
+    D = np.zeros((n, n))
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                vi = scaled[i]
+                vj = scaled[j]
+                if metric == "euclidean":
+                    d = np.linalg.norm(vi - vj)
+                elif metric == "l1":
+                    d = np.abs(vi - vj).sum()
+                elif metric == "cosine":
+                    num = np.dot(vi, vj)
+                    den = np.linalg.norm(vi) * np.linalg.norm(vj) + eps
+                    d = 1 - num / den
+                else:
+                    raise ValueError(f"Unknown metric {metric}")
+            else:
+                d = 0
+            D[i, j] = d
+    return D
+
+
 def _pool_individual_fairness(args):
     i, j, state_i, state_j, score_i, score_j, similarity_metric, alpha, distance_metric, num_actions = args
     d = similarity_metric(state_i, state_j, alpha=alpha, distance=distance_metric)
@@ -98,14 +133,8 @@ def get_reduction_distributions(reduction_matrix, i, j, epsilon=1e-12):
     # Take absolute values for row j, then normalize
     row_j = np.abs(reduction_matrix[j])
 
-    temperature = 0.001
-    p_i = np.exp(row_i / temperature)
-    p_i /= p_i.sum()
-    p_j = np.exp(row_j / temperature)
-    p_j /= p_j.sum()
-
-    p_i_clipped = np.clip(p_i, epsilon, None)
-    p_j_clipped = np.clip(p_j, epsilon, None)
+    p_i_clipped = np.clip(row_i, epsilon, None)
+    p_j_clipped = np.clip(row_j, epsilon, None)
 
     return p_i_clipped, p_j_clipped
 
@@ -554,27 +583,13 @@ class IndividualFairness(IndividualFairnessBase):
         if isinstance(distance_metric, tuple):
             distance_metric = distance_metric[0]
 
-        if distance_metric == "kl":
-            distance_metric = kl_divergence
-        elif distance_metric == "hellinger":
-            distance_metric = hellinger
-
         for state_df, C_diff in states:
-            reduction_impact = get_reduction_impact(C_diff)
-            hospitalization_risks = state_df["h_risk"].values
-            K = len(hospitalization_risks)
-
-            fairness = 0
-            n = 0
-            for i in range(K):
-                for j in range(i + 1, K):
-                    d_i, d_j = get_reduction_distributions(reduction_impact, i, j)
-                    distance_reductions = distance_metric(d_i, d_j, 0)
-                    diff = np.abs(hospitalization_risks[i] - hospitalization_risks[j]) - distance_reductions
-                    fairness += diff
-                    n += 1
-
-            if n > 0:
-                fairness_window += -1 + (fairness / n)
-
-        return (0, 0), fairness_window, (0, [], 0)
+            reduction_impact = get_reduction_impact(C_diff)          # shape (K, 6)
+            risks = state_df["h_risk"].values                       # shape (K,)
+            # compute pairwise risk-normalized distances
+            print("C_DIFF", C_diff)
+            D = risk_normalized_distance_matrix(reduction_impact, risks, metric="euclidean")
+            # accumulate fairness as sum of distances (zero means perfect proportionality)
+            fairness_window += np.sum(D)
+        f = 5 - fairness_window
+        return (0, 0), f, (0, [], 0)

@@ -31,7 +31,7 @@ class EpiEnv(gym.Env):
         self.K = len(N)
         self.N = N.sum()
         # contact matrix
-        self.C = np.ones((1, K, K)) if C is None else C
+        self.C = np.ones((1, self.K, self.K)) if C is None else C
         # factors of contact matrix for symptomatic people, reshape to match C shape
         self.C_sym_factor = np.array([1., 0.09, 0.13, 0.09, 0.06, 0.25])[:, None, None]
         self.C_full = self.C.copy()
@@ -148,7 +148,8 @@ class EpiEnv(gym.Env):
         # next-state , reward, terminal?, info
         # provide action as proxy for current SCM, impacts progression of epidemic
         return (state_n, event_n, action.copy()), np.array([r_ari, r_arh, r_sr_w, r_sr_s, r_sr_l, r_sr.sum()]), False, \
-               {"ARI": r_ari, "ARH": r_arh, "R_SR_W": r_sr_w, "R_SR_S": r_sr_s, "R_SR_L": r_sr_l, "SB": r_sr.sum()}
+               {"ARI": r_ari, "ARH": r_arh, "R_SR_W": r_sr_w, "R_SR_S": r_sr_s, "R_SR_L": r_sr_l, "SB": r_sr.sum(),
+                "lost_contacts_per_age": r_sr_per_age, "action": action}
 
         #return (state_n, event_n, action.copy()), np.array([r_arh, r_sr.sum()]), False, {"lost_contacts_per_age": r_sr_per_age}
         #return (state_n, event_n, action.copy()), np.array([r_ari, r_arh, r_sr_w, r_sr_s, r_sr_l]), False, {"lost_contacts_per_age": r_sr_per_age}

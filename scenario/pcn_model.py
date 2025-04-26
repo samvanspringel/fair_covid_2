@@ -1,13 +1,11 @@
-import copy
-
-import warnings
+import gym
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch
+import cv2
 import numpy as np
-import gym
-
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+import copy
+import wandb
 
 
 class MultiDiscreteAction(gym.ActionWrapper):
@@ -27,7 +25,7 @@ class ScaleRewardEnv(gym.RewardWrapper):
         self.scale = scale
 
     def reward(self, reward):
-        return (reward - self.min) / self.scale
+        return (reward - self.min)/self.scale
 
 
 class TodayWrapper(gym.Wrapper):
@@ -42,16 +40,14 @@ class TodayWrapper(gym.Wrapper):
         else:
             ss, se, sa = s
             return (ss[-1].T, se[-1], sa)
-
     # step function of covid env returns simulation results of every day of timestep
     # only keep current day
     # also discard first reward
     def step(self, action):
         s, r, d, i = super(TodayWrapper, self).step(action)
         # sum all the social burden objectives together:
-        # TODO temp remove
-        # p_tot = r[2:].sum()
-        # r = np.concatenate((r, p_tot[None]))
+        #p_tot = r[2:].sum()
+        #r = np.concatenate((r, p_tot[None]))
         if len(s) == 4:
             sb, ss, se, sa = s
             s = (sb, ss[-1].T, se[-1], sa)
@@ -96,54 +92,55 @@ class HistoryEnv(gym.Wrapper):
 
 ss_emb = {
     'conv1d': nn.Sequential(
-        nn.Conv1d(10, 20, kernel_size=3, stride=2, groups=5),
-        nn.ReLU(),
-        nn.Conv1d(20, 20, kernel_size=2, stride=1, groups=10),
-        nn.ReLU(),
-        nn.Flatten(),
-        nn.Linear(100, 64),
-        nn.SiLU()
-    ),
+            nn.Conv1d(10, 20, kernel_size=3, stride=2, groups=5),
+            nn.ReLU(),
+            nn.Conv1d(20, 20, kernel_size=2, stride=1, groups=10),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(100, 64),
+            nn.SiLU()
+        ),
     'small': nn.Sequential(
-        nn.Flatten(),
-        nn.Linear(130, 64),
-        nn.Sigmoid()
-    ),
+            nn.Flatten(),
+            nn.Linear(130, 64),
+            nn.Sigmoid()
+        ),
     'big': nn.Sequential(
-        nn.Flatten(),
-        nn.Linear(130, 64),
-        nn.SiLU(),
-        nn.Linear(64, 64),
-        nn.Sigmoid()
-    ),
+            nn.Flatten(),
+            nn.Linear(130, 64),
+            nn.SiLU(),
+            nn.Linear(64, 64),
+            nn.Sigmoid()
+        ),
 }
+
 
 se_emb = {
     'small': nn.Sequential(
-        nn.Linear(1, 64),
-        nn.Sigmoid()
-    ),
+            nn.Linear(1, 64),
+            nn.Sigmoid()
+        ),
     'big': nn.Sequential(
-        nn.Linear(1, 64),
-        nn.SiLU(),
-        nn.Linear(64, 64),
-        nn.Sigmoid()
-    )
+            nn.Linear(1, 64),
+            nn.SiLU(),
+            nn.Linear(64, 64),
+            nn.Sigmoid()
+        )
 }
+
 
 sa_emb = {
     'small': nn.Sequential(
-        nn.Linear(3, 64),
-        nn.Sigmoid()
-    ),
+            nn.Linear(3, 64),
+            nn.Sigmoid()
+        ),
     'big': nn.Sequential(
-        nn.Linear(3, 64),
-        nn.SiLU(),
-        nn.Linear(64, 64),
-        nn.Sigmoid()
-    )
+            nn.Linear(3, 64),
+            nn.SiLU(),
+            nn.Linear(64, 64),
+            nn.Sigmoid()
+        )
 }
-
 
 class CovidModel(nn.Module):
 
@@ -156,8 +153,8 @@ class CovidModel(nn.Module):
                  sa_emb,
                  with_budget=False):
         super(CovidModel, self).__init__()
-        self.scaling_factor = scaling_factor[:,objectives + (len(scaling_factor)-1,)]
 
+        self.scaling_factor = scaling_factor[:,objectives + (len(scaling_factor)-1,)]
         self.objectives = objectives
         self.ss_emb = ss_emb
         self.se_emb = se_emb
@@ -181,13 +178,13 @@ class CovidModel(nn.Module):
 
     def forward(self, state, desired_return, desired_horizon):
         # filter desired_return to only keep used objectives
-        desired_return = desired_return[:, self.objectives]
+        desired_return = desired_return[:,self.objectives]
         c = torch.cat((desired_return, desired_horizon), dim=-1)
         # commands are scaled by a fixed factor
-        c = c * self.scaling_factor
+        c = c*self.scaling_factor
         # if self.sb_emb is not None:
         sb, ss, se, sa = state
-        s = self.ss_emb(ss.float()) * self.se_emb(se.float()) * self.sa_emb(sa.float()) * self.sb_emb(sb.float())
+        s = self.ss_emb(ss.float())*self.se_emb(se.float())*self.sa_emb(sa.float())*self.sb_emb(sb.float())
         # else:
         #     ss, se, sa = state
         #     s = self.ss_emb(ss.float())*self.se_emb(se.float())*self.sa_emb(sa.float())
@@ -197,7 +194,7 @@ class CovidModel(nn.Module):
         s = self.s_emb(s)
         c = self.c_emb(c)
         # element-wise multiplication of state-embedding and command
-        sc = s * c
+        sc = s*c
         # sc = torch.cat((s, c), 1)
         log_prob = self.fc(sc)
         return log_prob
@@ -207,7 +204,6 @@ class DiscreteHead(nn.Module):
     def __init__(self, base):
         super(DiscreteHead, self).__init__()
         self.base = base
-
     def forward(self, state, desired_return, desired_horizon):
         x = self.base(state, desired_return, desired_horizon)
         x = F.log_softmax(x, 1)
@@ -218,7 +214,6 @@ class MultiDiscreteHead(nn.Module):
     def __init__(self, base):
         super(MultiDiscreteHead, self).__init__()
         self.base = base
-
     def forward(self, state, desired_return, desired_horizon):
         x = self.base(state, desired_return, desired_horizon)
         b, o = x.shape
@@ -232,7 +227,6 @@ class ContinuousHead(nn.Module):
     def __init__(self, base):
         super(ContinuousHead, self).__init__()
         self.base = base
-
     def forward(self, state, desired_return, desired_horizon):
         x = self.base(state, desired_return, desired_horizon)
         x = torch.sigmoid(x)
@@ -243,6 +237,6 @@ class ContinuousHead(nn.Module):
 
 def multidiscrete_env(env):
     # the discrete actions:
-    a = [[0.0, 0.3, 0.6], [0, 0.5, 1], [0.3, 0.6, 0.9]]
+    a = [[0.0, 0.3, 0.6],[0, 0.5, 1],[0.3, 0.6, 0.9]]
     env = MultiDiscreteAction(env, a)
     return env

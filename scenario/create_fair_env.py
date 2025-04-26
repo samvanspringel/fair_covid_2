@@ -101,14 +101,14 @@ def get_objective(obj):
 
 
 
-def get_scaling(args):
-    scales = [800000, 10000, 50., 20, 50, 90, 4e6, 170]
+def get_scaling():
+    scales = [800000, 10000, 50., 20, 50, 90, 4e6, 5]
     scale = np.array(scales)
 
-    ref_points = [-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0, -80e6, -3400]
+    ref_points = [-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0, -80e6, -10]
     ref_point = np.array(ref_points)
 
-    scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 0.1]]).to(device)
+    scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 0.1]]).to(device)
 
     max_returns = [0, 0, 0, 0, 0, 0, 0, 0]
     max_return = np.array(max_returns) / scale
@@ -120,7 +120,7 @@ def get_scaling(args):
     return scale, ref_point, scaling_factor, max_return
 
 
-def create_fair_covid_env(args, rewards_to_keep, fairness_notions):
+def create_fair_covid_env(args):
     args.env = "ode"
     env_type = 'ODE' if args.env == 'ode' else 'Binomial'
     args.action = 'cont'
@@ -132,7 +132,7 @@ def create_fair_covid_env(args, rewards_to_keep, fairness_notions):
         with_budget = True
         budget = f'Budget{args.budget}'
 
-    scale, ref_point, scaling_factor, max_return = get_scaling(args)
+    scale, ref_point, scaling_factor, max_return = get_scaling()
 
     lockdown = True
     if lockdown:
@@ -144,6 +144,7 @@ def create_fair_covid_env(args, rewards_to_keep, fairness_notions):
         env = gym.make(f'BECovid{l}{env_type}Discrete-v0')
         nA = env.action_space.n
     else:
+        print("STRING:", f'BECovid{l}{env_type}{budget}Continuous-v0')
         env = gym.make(f'BECovid{l}{env_type}{budget}Continuous-v0')
         if args.action == 'multidiscrete':
             env = multidiscrete_env(env)
@@ -269,7 +270,7 @@ def create_fairness_framework_env(args):
 
     if env_type == "covid":
         env, scale, ref_point, scaling_factor, max_return, ss, se, sa, nA, with_budget = \
-            create_fair_covid_env(args, args.objectives, all_individual_notions)
+            create_fair_covid_env(args)
 
     print("Environment: ", env)
 
@@ -303,7 +304,7 @@ def create_fairness_framework_env(args):
 
     wandb.login(key='d013457b05ccb7e9b3c54f86806d3bd4c7f2384a')
 
-    wandb.init(group=f"SBS{args.window}{all_args_objectives}_budget:{args.budget}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
+    wandb.init(group=f"TEST_ABFTA{args.window}{all_args_objectives}_budget:{args.budget}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
 
     return env, model, logdir, ref_point, scaling_factor, max_return
 

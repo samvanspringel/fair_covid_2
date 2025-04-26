@@ -7,6 +7,7 @@ from fairness.group import GroupNotion
 from fairness.individual import IndividualNotion
 from scenario.create_fair_env import OBJECTIVES_MAPPING as env_OBJ_MAP
 from scenario.create_fair_env import reward_indices
+import json
 
 group_type = "G"
 ind_type = "I"
@@ -45,7 +46,7 @@ def load_pcn_dataframes(requested_objectives, computed_objectives, all_objective
     #     base_results_dir += f"/team_{team_size}/"
     results_dir = base_results_dir
 
-    budgets = [0, 2, 3, 4, 5]
+    budgets = [3, 5]
 
     all_dataframes = []
 
@@ -53,7 +54,7 @@ def load_pcn_dataframes(requested_objectives, computed_objectives, all_objective
         for budget in budgets:
             objectives_indices = [reward_indices[o] for o in obj]
             co = [reward_indices[o] for o in cobj]
-            objectives_indices.extend(co)
+            #objectives_indices.extend(co)
             is_single = len(obj) == 1
             pcn_logs = []
             # Load in all seeds per experiment
@@ -124,31 +125,46 @@ def get_splits(env_name, populations, distances, windows, biases, requested_obje
     all_splits = (split_per_objective, split_per_bias, split_per_distance, split_per_window, split_per_population)
     assert sum(all_splits) < 2, f"Only one type of split allowed for a plot, given: {all_splits}. "
 
+    if env_name == "covid":
+        split_per_budget = True
+        return split_per_budget, plot_single_objective, plot_legend_as_subtitles
+
     return split_per_objective, split_per_bias, split_per_distance, split_per_window, split_per_population, \
            skip_subtitle, plot_legend_as_subtitles, plot_single_objective
 
 
-def get_iter_over_save(requested_objectives, computed_objectives, populations, distances, windows, biases,
+def get_iter_over_save(requested_objectives, computed_objectives, budgets, distances, windows, biases,
                        results_dir, s_prefix, is_fraud, steps):
     env_name = "fraud_detection" if is_fraud else "job_hiring"
     save_dir = results_dir
 
-    split_per_objective, split_per_bias, split_per_distance, split_per_window, split_per_population, \
-    skip_subtitle, plot_legend_as_subtitles, plot_single_objective = get_splits(env_name, populations, distances,
-                                                                                windows, biases, requested_objectives)
+    env_name = "covid"
+    populations = []
+    if env_name == "covid":
+        split_per_objective, split_per_bias, split_per_distance, split_per_window, split_per_population, \
+        skip_subtitle = False, False, False, False, False, False
+        split_per_budget, plot_legend_as_subtitles, plot_single_objective = get_splits(env_name, populations, distances,
+                                                                                    windows, biases,
+                                                                                    requested_objectives)
+    else:
+        split_per_objective, split_per_bias, split_per_distance, split_per_window, split_per_population, \
+        skip_subtitle, plot_legend_as_subtitles, plot_single_objective = get_splits(env_name, populations, distances,
+                                                                                    windows, biases, requested_objectives)
 
-    _population = [p for p in populations][0]
+    #_population = [p for p in populations][0]
     _bias = [p for p in biases][0]
     _distance = [p for p in distances][0]
     _window = [p for p in windows][0]
+    _budget = [p for p in budgets][0]
+
     _n = [".".join(o) for o in requested_objectives]
     _obj = "-".join(_n if plot_single_objective else _n[:1])
     obj = "-".join([":".join(o) for o in requested_objectives][:1])
     cobj = "-".join([":".join(o) for o in computed_objectives][:1])
 
     file_name = f"{s_prefix}{_obj}_b{_bias}_d{_distance}_w{_window}"
-    if not is_fraud and len(populations) == 1:
-        save_dir = f"{results_dir}/population_{_population}/"
+    # if not is_fraud and len(populations) == 1:
+    #     save_dir = f"{results_dir}/population_{_population}/"
     if split_per_objective:
         col_name = "objectives"
         iter_over = [":".join(obj) for obj in requested_objectives]
@@ -170,6 +186,11 @@ def get_iter_over_save(requested_objectives, computed_objectives, populations, d
     elif split_per_population:
         col_name = "population"
         iter_over = populations
+    elif split_per_budget:
+        col_name = "budget"
+        iter_over = budgets
+        save_dir += f"/budget_{_budget}"
+        file_name = f"{s_prefix}{_obj}_budget{_budget}"
     else:
         raise RuntimeError
 
@@ -200,8 +221,9 @@ def _read_2d_array(df, name, idx=None):
     else:
         string = df[name].iloc[idx]
         print(idx, df[name].iloc[idx])
-    new_string = string.replace("\n", "")[2:-2].split("] [")
-    array = np.vstack([np.fromstring(s, sep=" ", dtype=np.float32) for s in new_string])
+    array = np.array(json.loads(string))
+    # new_string = string.replace("\n", "")[2:-2].split("] [")
+    # array = np.vstack([np.fromstring(s, sep=" ", dtype=np.float32) for s in new_string])
     return array
 
 
@@ -212,10 +234,7 @@ def get_coverage_sets(pcn_dfs, objectives_indices, is_single, idx=None):
 
     for pi, pcn_df in enumerate(pcn_dfs):
         try:
-            print(pcn_df.head(1))
             coverage_set = _read_2d_array(pcn_df, "coverage_set", idx)
-            print(type(coverage_set), coverage_set.shape)
-            print(coverage_set)
             nd_coverage_set = _read_2d_array(pcn_df, "nd_coverage_set", idx)
         except IndexError as e:
             full_nd_coverage_set = np.zeros(shape=(1, len(objectives_indices)))
@@ -223,9 +242,8 @@ def get_coverage_sets(pcn_dfs, objectives_indices, is_single, idx=None):
             nd_coverage_sets.append(full_nd_coverage_set)
             continue
 
-        print(coverage_set)
         print(coverage_set.shape)
-        exit(1)
+
         len_objs = coverage_set.shape[1]
         full_nd_coverage_set = np.zeros(shape=(len(nd_coverage_set), len_objs))
         for i, nd in enumerate(nd_coverage_set):

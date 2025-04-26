@@ -11,6 +11,7 @@ import datetime
 import pandas as pd
 import h5py
 import pathlib
+from agent.pcn.eval_pcn import eval_pcn
 
 # Same imports as eval_pcn, except we replace the environment creation
 # with your create_fair_env (create_fair_covid_env).
@@ -34,13 +35,14 @@ age_groups = {
 MODEL_PATH = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/experiments/results/cluster/steps_300000/objectives_R_ARH:R_SB_W:R_SB_S:R_SB_L_SBS:ABFTA/ref_results/seed_0/6obj_3days_crashed/model_9.pt"  # your single best model
 
 
+
 def interpolate_runs(runs, w=100):
     # Create a common x_grid from all runs’ first column values
     all_steps = np.array(sorted(np.unique(np.concatenate([r[:, 0] for r in runs]))))
     all_values = np.stack([np.interp(all_steps, r[:, 0], r[:, 1]) for r in runs], axis=0)
     return all_steps, all_values
 
-def load_runs_from_logdir(logdir):
+def load_runs_from_logdir(logdir, objectives):
     """
     Recursively finds all 'log.h5' files in logdir, loads the final Pareto front
     from each, and returns a list of dicts (each has 'pareto_front').
@@ -51,11 +53,11 @@ def load_runs_from_logdir(logdir):
         print(path)
         with h5py.File(path, 'r') as logfile:
             pareto_front = logfile['train/leaves/ndarray'][-1]
-            _, pareto_front_i = non_dominated(pareto_front[:, [1, 5]], return_indexes=True)
+            _, pareto_front_i = non_dominated(pareto_front[:, objectives], return_indexes=True)
             pareto_front = pareto_front[pareto_front_i]
 
             pf = np.argsort(pareto_front, axis=0)
-            pareto_front = pareto_front[pf[:, 1]]
+            pareto_front = pareto_front[pf[:, 0]]
             pareto_front = pareto_front[:, [1, 5]]
             runs.append({'pareto_front': pareto_front})
     return runs
@@ -64,6 +66,7 @@ def plot_fixed_data(measure):
     """
     Reads in fixed.csv (assumes two columns: x and y) and plots its data using plt.scatter.
     """
+    measure = "sb"
     df_fixed = pd.read_csv(f"fixed_{measure}.csv")
     # Check if mean of first column > 3000, and scale if needed
     if 'o_0' in df_fixed.columns and 'o_1' in df_fixed.columns:
@@ -87,8 +90,13 @@ def plot_pareto_front_from_dir(measure, logdir, budget_label, scale_x=10000, sca
     5) Finally, it plots and (optionally) saves the resulting figure.
     Returns (x_vals_scaled, mean_curve, std_curve) when using interpolation; otherwise (None, None, None).
     """
-    # 1) Load all runs
-    runs = load_runs_from_logdir(logdir)
+    if measure == "sbs":
+        objectives = [1, 6]
+    elif measure == "abfta":
+        objectives = [1, 7]
+    else:
+        objectives = [1, 5]
+    runs = load_runs_from_logdir(logdir, objectives)
 
     # 2) Process each run’s Pareto front:
     sorted_runs = []
@@ -184,7 +192,11 @@ def make_budget_plots(measure, scale_x, scale_y):
     # Step B: Combine all budgets into one single figure
     plt.figure()
     for b, (x_vals_scaled, mean_curve, std_curve) in results_dict.items():
-        plt.plot(x_vals_scaled, mean_curve, label=f'Budget={b}')
+        if b == 0:
+            b_label = "∞"
+        else:
+            b_label = b
+        plt.plot(x_vals_scaled, mean_curve, label=f'Budget={b_label}')
         plt.fill_between(
             x_vals_scaled,
             mean_curve - std_curve,
@@ -194,8 +206,9 @@ def make_budget_plots(measure, scale_x, scale_y):
     plot_fixed_data(measure)
     plt.xlabel('Hospitalizations (scaled)')
     plt.ylabel('Social Burden (scaled)')
-    plt.title('Coverage set variation for multiple budgets')
+    plt.title('Pareto front for multiple budgets')
     plt.legend()
+    plt.grid(True)
     plt.tight_layout()
     plt.savefig("NCS_ref_interp_all_budgets.png")
     print("Saved NCS_ref_interp_all_budgets.png")
@@ -355,7 +368,7 @@ def compute_abfta(states, distance_metric="kl"):
 
     return fairness_window
 
-def run_episode(env, model, desired_return, desired_horizon, max_return, objectives, fn):
+def run_episode_(env, model, desired_return, desired_horizon, max_return, objectives, fn):
     """
     Identical to eval_pcn.py's run_episode.
     """
@@ -371,17 +384,13 @@ def run_episode(env, model, desired_return, desired_horizon, max_return, objecti
         action = choose_action(model, obs, desired_return, desired_horizon, eval=True)
         n_obs, reward, done, info = env.step(action)
         fairness_states.append(env.state_df())
-        if len(objectives) > 2:
-            extra = len(objectives) - len(reward)
-            filler = np.empty(extra)
-            reward = np.append(reward, filler)
 
         transitions.append(
             Transition(
-                observation=obs[1],
-                action=action,
+                observation=obs[0],
+                action=info["action"],
                 reward=np.float32(reward).copy(),
-                next_observation=n_obs[1],
+                next_observation=n_obs[0],
                 terminal=done
             )
         )
@@ -389,6 +398,8 @@ def run_episode(env, model, desired_return, desired_horizon, max_return, objecti
 
         obs = n_obs
         # clip desired return to avoid negative or beyond max
+        #print("rew", reward)
+        #print("des", desired_return)
         desired_return = np.clip(desired_return - reward, None, max_return, dtype=np.float32)
         # clip desired horizon to avoid negative
         desired_horizon = np.float32(max(desired_horizon - 1, 1.0))
@@ -401,220 +412,171 @@ def run_episode(env, model, desired_return, desired_horizon, max_return, objecti
         sbs_states = compute_sbs(fairness_states)
         abfta_states = compute_abfta(fairness_states)
 
-    return transitions, lost_contacts_per_agegroup, sbs_states, abfta_states
+    return transitions, lost_contacts_per_agegroup
+
+def evaluate_pcn(model_dir, objectives, save_dir):
+    n_budget = 5
+    budget = f'Budget{n_budget}' if n_budget is not None else ''
+    model_dir = pathlib.Path(model_dir)
+    save_dir = pathlib.Path(save_dir)
+    # Recursively find the log.h5 file under model_dir
+    log_files = list(model_dir.rglob('log.h5'))
+    if not log_files:
+        raise FileNotFoundError(f"No log.h5 found under {model_dir}")
+    log_path = log_files[0]
+    log = h5py.File(log_path, 'r')
+
+    # Recursively find all model checkpoint files under model_dir
+    checkpoint_paths = list(model_dir.rglob('model_*.pt'))
+    if not checkpoint_paths:
+        raise FileNotFoundError(f"No model_*.pt files found under {model_dir}")
+    checkpoint_paths = sorted(checkpoint_paths)
+    model = torch.load(str(checkpoint_paths[-1]), weights_only=False)
+
+    with log:
+        pareto_front = log['train/leaves/ndarray'][-1]
+        _, pareto_front_i = non_dominated(pareto_front[:, objectives], return_indexes=True)
+        pareto_front = pareto_front[pareto_front_i]
+
+        pf = np.argsort(pareto_front, axis=0)
+        pareto_front = pareto_front[pf[:, 0]]
+
+    env_type = 'ODE'
+
+    scale, ref_point, scaling_factor, max_return = get_scaling()
+
+    scale = scale[0:max(objectives)+1]
+    scaling_factor = scaling_factor[0:max(objectives)+1]
+    ref_point = ref_point[0:max(objectives)+1]
+    max_return = max_return[0:max(objectives)+1]
+
+    envs = {}
+    env = gym.make(f'BECovidWithLockdown{env_type}{budget}Continuous-v0')
+    # env = gym.make(f'BECovidWithLockdownUntil2021{env_type}Continuous-v0')
+    nA = np.prod(env.action_space.shape)
+    env.action = lambda x: x
+    env = TodayWrapper(env)
+    env = ScaleRewardEnv(env, scale=scale)
+    print(env)
+
+    interactive = False
+
+    inp = -1
+    if not interactive:
+        (model_dir / 'policies-executions').mkdir(exist_ok=True)
+        print('=' * 38)
+        print('not interactive, this may take a while')
+        print('=' * 38)
+        all_returns = []
+    while True:
+        inp = inp + 1
+        if inp >= len(pareto_front):
+            break
+        desired_return = pareto_front[inp]
+        desired_return = desired_return[0:max(objectives)+1]
+
+        desired_horizon = 17  # 35
+
+        r, t = eval_pcn(env, model, desired_return, desired_horizon, max_return, objectives)
+        #plt.savefig(model_dir / 'policies-executions' / f'policy_{inp}.png')
+        for i, t_i in enumerate(t):
+            (save_dir / 'policies-transitions' / f'{inp}').mkdir(exist_ok=True, parents=True)
+            t_i.to_csv(save_dir / 'policies-transitions' / f'{inp}' / f'run_{i}.csv', index_label='index')
+        all_returns.append(r)
+
+import os
+import glob
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.dates import DateFormatter
+
+def plot_policies(policy_ids, data_dir):
+    figsize_x = 13
+    figsize_y = 2 * len(policy_ids)
+    figsize = (figsize_x, figsize_y)
+
+    fig, axes = plt.subplots(nrows=len(policy_ids), ncols=1, sharex=True, figsize=figsize)
+    date_fmt = DateFormatter("%d/%m")
+
+    for ax, pid in zip(axes, policy_ids):
+        # find the run CSV inside the numbered policy folder
+        policy_folder = os.path.join(data_dir, str(pid))
+        run_files = glob.glob(os.path.join(policy_folder, 'run*.csv'))
+        if not run_files:
+            raise FileNotFoundError(f"No run CSV file found in {policy_folder}")
+        csv_path = run_files[0]
+        df = pd.read_csv(csv_path, parse_dates=['dates'])
+
+        # left axis
+        ax.plot(df['dates'], df['i_hosp_new'], color='cyan',   label='daily new hosp')
+        ax.plot(df['dates'], df['i_icu_new'],  color='orange', label='daily new ICU')
+        ax.plot(df['dates'], df['d_new'],      color='red',    label='daily deaths')
+        ax.set_ylabel('individuals')
+        ax.set_ylim(0, 4500)
+        ax.tick_params(axis='y', labelcolor='black')
+
+        # right axis
+        ax2 = ax.twinx()
+        ax2.plot(df['dates'], df['p_w'], '--', color='blue',     label='$p_w$')
+        ax2.plot(df['dates'], df['p_s'], '--', color='magenta',  label='$p_s$')
+        ax2.plot(df['dates'], df['p_l'], '--', color='darkgray', label='$p_l$')
+        ax2.set_ylabel('proportion')
+        ax2.set_ylim(-0.05, 1.05)
+        ax2.tick_params(axis='y', labelcolor='black')
+
+        # formatting
+        ax.xaxis.set_visible(False)  # hide all x‐ticks until the bottom plot
+        ax2.xaxis.set_visible(False)
+
+    # bottom plot gets the time axis
+    axes[-1].xaxis.set_visible(True)
+    axes[-1].set_xlabel('time')
+    axes[-1].xaxis.set_major_formatter(date_fmt)
+    fig.autofmt_xdate()
+
+    # single legend at top
+    # collect all handles & labels from the top subplot
+    handles = []
+    labels = []
+    for axis in (axes[0], axes[0].twinx()):
+        h, l = axis.get_legend_handles_labels()
+        handles += h
+        labels  += l
+    fig.legend(handles, labels, loc='upper center', ncol=6, frameon=False)
+
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.88)  # make room for the legend
+    plt.show()
 
 
-def plot_episode(transitions, lost_contacts, alpha=1.0):
-    fig = plt.figure(figsize=(14, 12), constrained_layout=True)
-    gs = fig.add_gridspec(6, 1)
-    axs = [
-        fig.add_subplot(gs[0, 0]),
-        fig.add_subplot(gs[1, 0]),
-        fig.add_subplot(gs[2, 0]),
-        fig.add_subplot(gs[3:, 0])
-    ]
+def main(run_episodes=False):
+    budget = 5
+    seed = 8
 
-    states = np.array([t.observation for t in transitions])
-    # add final state
-    states = np.concatenate((states, transitions[-1].next_observation[None]), axis=0)
-    ari = (states[:-1, :, 0] - states[1:, :, 0]).sum(axis=-1)
-    i_hosp_new = states[..., -3].sum(axis=-1)
-    i_icu_new = states[..., -2].sum(axis=-1)
-    d_new = states[..., -1].sum(axis=-1)
-    actions = np.array([t.action for t in transitions])
-    # append action of None
-    actions = np.concatenate((actions, [[None] * 3]))
-
-    # steps in dates
-    start = datetime.date(2020, 5, 3)
-    week = datetime.timedelta(days=7)
-    dates = [start + week * i for i in range(0, 18, 2)]
-
-    axs = plt.gcf().axes
-    # hospitalizations
-    ax = axs[0]
-    ax.plot(i_hosp_new, alpha=alpha, label='hosp', color='blue')
-    ax.plot(i_icu_new, alpha=alpha, label='icu', color='green')
-    ax.plot(i_hosp_new + i_icu_new, label='hosp+icu', alpha=alpha, color='orange')
-    ax.set_xticks(ticks=np.arange(0, 18, 2), labels=[str(d.day) + '/' + str(d.month) for d in dates])
-
-    # deaths
-    ax = axs[1]
-    ax.plot(d_new, alpha=alpha, label='deaths', color='red')
-    # ax.plot(ari, alpha=alpha, label='ari', color='black')
-
-    # actions
-    ax = axs[2]
-    ax.set_ylim([0, 1])
-    ax.plot(actions[:, 0], alpha=alpha, label='p_w', color='blue')
-    ax.plot(actions[:, 1], alpha=alpha, label='p_s', color='orange')
-    ax.plot(actions[:, 2], alpha=alpha, label='p_l', color='green')
-
-    axs[0].set_xlabel('days')
-    axs[0].set_ylabel('hospitalizations')
-    axs[1].set_ylabel('deaths')
-    axs[2].set_ylabel('actions')
-    # for ax in axs:
-    #     ax.legend()
-
-    # Use the 4th axis (axs[3]) to plot the lost contacts arrays
-    ax = axs[3]
-    lost_contacts_array = np.stack(lost_contacts, axis=0)  # shape (timesteps, 10)
-
-    for i in range(lost_contacts_array.shape[1]):
-        ax.plot(lost_contacts_array[:, i], label=f'Age {age_groups[i]}')
-
-    ax.set_ylabel('Lost Contacts')
-    ax.set_title('Lost Contacts per Age Group')
-    ax.legend()
-
-    return [start + week * i for i in range(0, 18, 1)], ari, i_hosp_new, i_icu_new, d_new, actions[:, 0], actions[:,
-                                                                                                          1], actions[:,
-                                                                                                              2]
-
-
-def evaluate_pcn(env, model, desired_return, desired_horizon, max_return, objectives, results_title, fn, gamma=1.0, n=1):
-    alpha = 1 if n == 1 else 0.2
-    returns = np.empty((n, desired_return.shape[-1]))
-    all_transitions = []
-    for n_i in range(n):
-        transitions, lost_contacts = run_episode(env, model, desired_return, desired_horizon, max_return, objectives, fn)
-        # compute return
-        for i in reversed(range(len(transitions) - 1)):
-            transitions[i].reward += gamma * transitions[i + 1].reward
-
-        returns[n_i] = transitions[i].reward.flatten()
-        print(f'ran model with desired-return: {desired_return.flatten()}, got {transitions[i].reward.flatten()}')
-        print('action sequence: ')
-        for t in transitions:
-            print(f'- {t.action}')
-        t = plot_episode(transitions, lost_contacts, alpha)
-        t = t + tuple(zip(*[ti.reward * env.scale for ti in transitions]))
-
-        df = pd.DataFrame([x for x in zip(*t)],
-                          columns=['dates', 'ari', 'i_hosp_new', 'i_icu_new', 'd_new', 'p_w', 'p_s', 'p_l'] + [f'o_{oi}'
-                                                                                                               for oi in
-                                                                                                               range(
-                                                                                                                   returns.shape[
-                                                                                                                       1])])
-        # manually set p_s to 0 during school holidays
-        holidays = df['dates'] >= datetime.date(2020, 7, 1)
-        df.loc[holidays, 'p_s'] = 0
-        all_transitions.append(df)
-    title = results_title + ': Re: ' + ' '.join([f'{o:.3f}' for o in (returns.mean(0) * env.scale)[objectives]])
-    title += '\n'
-    title += results_title + ': Rt: ' + ' '.join([f'{o:.3f}' for o in (desired_return * env.scale)[objectives]])
-    plt.suptitle(title)
-    print(
-        f'ran model with desired-return: {desired_return[objectives].flatten()}, got average return {returns[:, objectives].mean(0).flatten()}')
-    return returns, all_transitions
-
-
-def main():
-    """
-    Reproduces eval_pcn.py logic but uses create_fair_covid_env from create_fair_env.py
-    to build the environment, and then loads & evaluates a model from the specified dir.
-    """
-    # ------------------------------------------------------------
-    # 1) Define arguments that we would normally parse
-    # ------------------------------------------------------------
-    class Args:
-        seed = 0
-        env = 'covid'
-        episode_length = 100
-        bias = 0
-        ignore_sensitive = False
-        budget = 5
-        # Add any others you need from create_fair_covid_env
-        # ...
-    args = Args()
-
-
-
-    # ------------------------------------------------------------
-    # 3) Hardcode the path to your logs/model
-    # ------------------------------------------------------------
-    model_paths_dir = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/fair_covid_2/agent/pcn/"
-    model_paths = {"ref_results" : [0, 1],
-                   "sbs_results" : [0, 1, 2],
-                   "abfta_results" : [0, 1, 2],
-                   "sbs_abfta_results" : [0, 1, 2, 3]}
+    model_paths_dir = f"/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/Results/"
+    model_paths = {"sb_results": [1, 5],
+                   #"sbs_results": [1, 6]
+                   }
 
     fn = ["none", "sbs", "abfta", "both"]
 
-    index = 0
-    for path, obj in model_paths.items():
-        fn = fn[index]
-        index += 1
+    inspect_policies =[0, 30, 140]
 
-        # ------------------------------------------------------------
-        # 2) Create the environment from create_fair_env
-        # ------------------------------------------------------------
-        env, scale, ref_point, scaling_factor, max_return, *_ = create_fair_covid_env(
-            args, rewards_to_keep=obj
-        )
-        print(scale)
-        print(scaling_factor)
-        print(max_return)
-        print("Environment created:", env)
+    if run_episodes:
+        for path, obj in model_paths.items():
+            budget_seed = f"/budget_{budget}/seed_{seed}"
+            model_path = model_paths_dir + path + budget_seed
+            save_path = model_paths_dir + path
+            evaluate_pcn(model_path, obj, save_path)
+    else:
+        for path, obj in model_paths.items():
+            save_path = model_paths_dir + path + "/policies-transitions"
+            plot_policies(inspect_policies, save_path)
 
-        results_path = model_paths_dir + path
-
-        model_dir = pathlib.Path(results_path)
-        print("Using model directory:", model_dir)
-
-        # Load the HDF5 log if needed
-        log_h5 = model_dir / "log.h5"
-        # This is how eval_pcn does it:
-        with h5py.File(log_h5, 'r') as log:
-            # read the final pareto front
-            pf_array = log['train/leaves/ndarray'][-1]
-            # get nondominated front, just like eval_pcn
-            pf, pf_i = non_dominated(pf_array[:, obj], return_indexes=True)  # example if you had objectives 1,5
-            # sort them
-            pf_sorted = pf[ np.argsort(pf, axis=0)[:, 0] ]
-            print("Pareto front shape:", pf_sorted.shape)
-
-        # ------------------------------------------------------------
-        # 4) Load the most recent checkpoint model_10.pt (or whichever)
-        # ------------------------------------------------------------
-        # Typically, eval_pcn uses `model_10.pt`; you can adapt if needed:
-        checkpoints = sorted([str(p) for p in model_dir.glob('model_10.pt')])
-        if len(checkpoints) == 0:
-            raise FileNotFoundError("No model_*.pt found in directory.")
-        print("Found checkpoint(s):", checkpoints)
-        model = torch.load(checkpoints[-1], map_location=device, weights_only=False)
-        model.eval()
-
-        # ------------------------------------------------------------
-        # 5) Evaluate
-        #    We'll replicate the typical usage: pick a 'desired_return'
-        #    from the pareto front, or define your own. We'll choose
-        #    the 0th item from pf_sorted as an example, or a direct
-        #    desired_return array. Also define `objectives`.
-        # ------------------------------------------------------------
-        objectives = obj      # match your environment's indexing
-        desired_return = pf_sorted[0]  # e.g. first solution from the front
-        desired_return = desired_return.astype(np.float32)
-        desired_horizon = 17.0
-
-        # Evaluate the model on 1 or more episodes
-        evaluate_pcn(
-            env,
-            model,
-            desired_return,
-            desired_horizon,
-            max_return,
-            objectives,
-            path,
-            fn,
-            gamma=1.0,
-            n=1,
-        )
-        plt.savefig(path)
 
 
 def get_scaling_plot(measure):
+    return 10000, 90
     if measure == "sb":
         return 10000, 90
     elif measure == "sbs":
@@ -624,11 +586,8 @@ def get_scaling_plot(measure):
 
 
 if __name__ == "__main__":
-    measure = "sb"
-    scale_x, scale_y = get_scaling_plot(measure)
-    make_budget_plots(measure, scale_x, scale_y)
-    # print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-    # plot_pareto_fronts_sbs()
-    # print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-    # plot_pareto_fronts_abfta()
-    #main()
+    # measure = "sbs"
+    # scale_x, scale_y = get_scaling_plot(measure)
+    # make_budget_plots(measure, scale_x, scale_y)
+    run_episodes = True
+    main(run_episodes)

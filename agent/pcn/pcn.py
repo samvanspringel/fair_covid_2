@@ -1,9 +1,3 @@
-import sys
-import time
-import warnings
-
-sys.path.append("./")  # for command-line execution to find the other packages (e.g. envs)
-
 import heapq
 import numpy as np
 from dataclasses import dataclass
@@ -12,10 +6,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pygmo import hypervolume
 from agent.pcn.logger import Logger
+from loggers.logger import *
 import wandb
 import pickle
-from loggers.logger import *
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+import time
 
 def crowding_distance(points, ranks=None):
     crowding = np.zeros(points.shape)
@@ -251,7 +245,6 @@ def update_model(model, opt, experience_replay, batch_size, noise=0., clip_grad_
     obs, actions, desired_return, desired_horizon = zip(*batch)
     # since each state is a tuple with (compartment, events, prev_action), reorder obs
     obs = zip(*obs)
-
     obs = tuple([torch.tensor(o).to(device) for o in obs])
     # TODO TEST add noise to the desired return
     desired_return = torch.tensor(desired_return).to(device)
@@ -288,10 +281,11 @@ def eval(env, model, coverage_set, horizons, max_return, agent_logger, current_e
     for e_i, target_return, horizon in zip(np.arange(len(coverage_set)), coverage_set, horizons):
         n_transitions = []
         for n_i in range(n):
-            transitions = run_episode_fair_covid(env, model, target_return, np.float32(horizon), max_return, agent_logger, current_ep, current_t,  eval=True)
+            transitions = run_episode_fair_covid(env, model, target_return, np.float32(horizon), max_return,
+                                                 agent_logger, current_ep, current_t, eval=True)
             # compute return
-            for i in reversed(range(len(transitions)-1)):
-                transitions[i].reward += gamma * transitions[i+1].reward
+            for i in reversed(range(len(transitions) - 1)):
+                transitions[i].reward += gamma * transitions[i + 1].reward
             e_returns[e_i, n_i] = transitions[0].reward
             n_transitions.append(transitions)
         all_transitions.append(n_transitions)
@@ -299,10 +293,10 @@ def eval(env, model, coverage_set, horizons, max_return, agent_logger, current_e
     return e_returns, all_transitions
 
 
-def train(env, 
+def train(env,
           model,
           learning_rate=1e-2,
-          batch_size=1024, 
+          batch_size=1024,
           total_steps=1e7,
           n_model_updates=100,
           n_step_episodes=10,
@@ -344,16 +338,17 @@ def train(env,
         loss = []
         entropy = []
         for _ in range(n_model_updates):
-            l, lp = update_model(model, opt, experience_replay, batch_size=batch_size, noise=noise, clip_grad_norm=clip_grad_norm)
+            l, lp = update_model(model, opt, experience_replay, batch_size=batch_size, noise=noise,
+                                 clip_grad_norm=clip_grad_norm)
             loss.append(l.detach().cpu().numpy())
             lp = lp.detach().cpu().numpy()
-            ent = np.sum(-np.exp(lp)*lp)
+            ent = np.sum(-np.exp(lp) * lp)
             entropy.append(ent)
 
         desired_return, desired_horizon = choose_commands(experience_replay, n_er_episodes, objectives)
 
-         # get all leaves, contain biggest elements, experience_replay got heapified in choose_commands
-        leaves = np.array([(len(e[2]), e[2][0].reward) for e in experience_replay[len(experience_replay)//2:]])
+        # get all leaves, contain biggest elements, experience_replay got heapified in choose_commands
+        leaves = np.array([(len(e[2]), e[2][0].reward) for e in experience_replay[len(experience_replay) // 2:]])
         e_lengths, e_returns = zip(*leaves)
         e_lengths, e_returns = np.array(e_lengths), np.array(e_returns)
         try:
@@ -374,22 +369,25 @@ def train(env,
             add_episode(transitions, experience_replay, gamma=gamma, max_size=max_size, step=step)
             returns.append(transitions[0].reward)
             horizons.append(len(transitions))
-        
+
         total_episodes += n_step_episodes
         logger.put('train/episode', total_episodes, step, 'scalar')
         logger.put('train/loss', np.mean(loss), step, 'scalar')
         logger.put('train/entropy', np.mean(entropy), step, 'scalar')
         logger.put('train/horizon/desired', desired_horizon, step, 'scalar')
-        logger.put('train/horizon/distance', np.linalg.norm(np.mean(horizons)-desired_horizon), step, 'scalar')
+        logger.put('train/horizon/distance', np.linalg.norm(np.mean(horizons) - desired_horizon), step, 'scalar')
         for o in range(len(desired_return)):
             logger.put(f'train/return/{o}/value', desired_horizon, step, 'scalar')
             logger.put(f'train/return/{o}/desired', np.mean(np.array(returns)[:, o]), step, 'scalar')
-            logger.put(f'train/return/{o}/distance', np.linalg.norm(np.mean(np.array(returns)[:, o])-desired_return[o]), step, 'scalar')
-        print(f'step {step} \t return {np.mean(returns, axis=0)}, ({np.std(returns, axis=0)}) \t loss {np.mean(loss):.3E}')
-        
+            logger.put(f'train/return/{o}/distance',
+                       np.linalg.norm(np.mean(np.array(returns)[:, o]) - desired_return[o]), step, 'scalar')
+        print(
+            f'step {step} \t return {np.mean(returns, axis=0)}, ({np.std(returns, axis=0)}) \t loss {np.mean(loss):.3E}')
+
         # compute hypervolume of leaves
-        valid_e_returns = e_returns[np.all(e_returns[:,objectives] >= ref_point[objectives,], axis=1)]
-        hv = compute_hypervolume(np.expand_dims(valid_e_returns[:,objectives], 0), ref_point[objectives,])[0] if len(valid_e_returns) else 0
+        valid_e_returns = e_returns[np.all(e_returns[:, objectives] >= ref_point[objectives,], axis=1)]
+        hv = compute_hypervolume(np.expand_dims(valid_e_returns[:, objectives], 0), ref_point[objectives,])[0] if len(
+            valid_e_returns) else 0
 
         wandb.log({
             'episode': total_episodes,
@@ -399,14 +397,14 @@ def train(env,
             'hypervolume': hv,
         }, step=step)
 
-        if step >= (n_checkpoints+1)*total_steps/10:
-            torch.save(model, f'{logger.logdir}/model_{n_checkpoints+1}.pt')
+        if step >= (n_checkpoints + 1) * total_steps / 10:
+            torch.save(model, f'{logger.logdir}/model_{n_checkpoints + 1}.pt')
             n_checkpoints += 1
 
             coverage_set_table = wandb.Table(data=e_returns, columns=[f'o_{o}' for o in range(e_returns.shape[1])])
 
             # current coverage set
-            _, e_i = non_dominated(e_returns[:,objectives], return_indexes=True)
+            _, e_i = non_dominated(e_returns[:, objectives], return_indexes=True)
             e_returns = e_returns[e_i]
             e_lengths = e_lengths[e_i]
 
@@ -414,18 +412,20 @@ def train(env,
             # save raw evaluation returns
             logger.put(f'eval/returns/{n_checkpoints}', e_r, 0, f'{len(e_r)}d')
             # compute e-metric
-            epsilon = epsilon_metric(e_r[...,objectives].mean(axis=1), e_returns[...,objectives])
+            epsilon = epsilon_metric(e_r[..., objectives].mean(axis=1), e_returns[..., objectives])
             logger.put('eval/epsilon/max', epsilon.max(), step, 'scalar')
             logger.put('eval/epsilon/mean', epsilon.mean(), step, 'scalar')
-            print('='*10, ' evaluation ', '='*10)
+            print('=' * 10, ' evaluation ', '=' * 10)
             for d, r in zip(e_returns, e_r):
                 print('desired: ', d, '\t', 'return: ', r.mean(0))
             print(f'epsilon max/mean: {epsilon.max():.3f} \t {epsilon.mean():.3f}')
-            print('='*22)
+            print('=' * 22)
 
-            nd_coverage_set_table = wandb.Table(data=e_returns*env.scale[None], columns=[f'o_{o}' for o in range(e_returns.shape[1])])
-            nd_executions_table = wandb.Table(data=e_r.mean(axis=1)*env.scale[None], columns=[f'o_{o}' for o in range(e_returns.shape[1])])
-            
+            nd_coverage_set_table = wandb.Table(data=e_returns * env.scale[None],
+                                                columns=[f'o_{o}' for o in range(e_returns.shape[1])])
+            nd_executions_table = wandb.Table(data=e_r.mean(axis=1) * env.scale[None],
+                                              columns=[f'o_{o}' for o in range(e_returns.shape[1])])
+
             executions_transitions = wandb.Artifact(
                 f'run-{wandb.run.id}-execution-transitions', type='transitions'
             )
@@ -442,7 +442,8 @@ def train(env,
             wandb.run.log_artifact(executions_transitions)
 
 
-def run_episode_fair_covid(env, model, desired_return, desired_horizon, max_return, agent_logger, episode, current_t, eval=False):
+def run_episode_fair_covid(env, model, desired_return, desired_horizon, max_return, agent_logger, episode, current_t,
+                           eval=False):
     curr_t = time.time()
     transitions = []
     obs = env.reset()
@@ -474,9 +475,9 @@ def run_episode_fair_covid(env, model, desired_return, desired_horizon, max_retu
         obs = n_obs
         # clip desired return, to return-upper-bound,
         # to avoid negative returns giving impossible desired returns
-        desired_return = np.clip(desired_return-reward, None, max_return, dtype=np.float32)
+        desired_return = np.clip(desired_return - reward, None, max_return, dtype=np.float32)
         # clip desired horizon to avoid negative horizons
-        desired_horizon = np.float32(max(desired_horizon-1, 1.))
+        desired_horizon = np.float32(max(desired_horizon - 1, 1.))
 
         next_t = time.time()
         if not eval:
@@ -491,8 +492,6 @@ def run_episode_fair_covid(env, model, desired_return, desired_horizon, max_retu
         agent_logger.write_data(log_entries, path)
 
     return transitions
-
-
 
 
 def train_fair_covid(env,
@@ -519,7 +518,6 @@ def train_fair_covid(env,
     total_episodes = n_er_episodes
     opt = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-
     logger = Logger(logdir=logdir)
 
     # TODO Alexandra logs
@@ -543,7 +541,6 @@ def train_fair_covid(env,
     eval_logger.create_file(f"{logdir}/eval_log.csv")
     if discount_history_logger:
         discount_history_logger.create_file(f"{logdir}/history.csv")
-
 
     n_checkpoints = 0
     # fill buffer with random episodes
@@ -617,7 +614,8 @@ def train_fair_covid(env,
         returns = []
         horizons = []
         for _ in range(n_step_episodes):
-            transitions = run_episode_fair_covid(env, model, desired_return, desired_horizon, max_return, agent_logger, episode=ep, current_t=step, eval=False)
+            transitions = run_episode_fair_covid(env, model, desired_return, desired_horizon, max_return, agent_logger,
+                                                 episode=ep, current_t=step, eval=False)
             step += len(transitions)
             ep += 1
             add_episode(transitions, experience_replay, gamma=gamma, max_size=max_size, step=step)
@@ -672,7 +670,8 @@ def train_fair_covid(env,
             e_returns = e_returns[e_i]
             e_lengths = e_lengths[e_i]
 
-            e_r, t_r = eval(env, model, e_returns, e_lengths, max_return, agent_logger, current_t=step, current_ep=ep, gamma=gamma, n=n_evaluations)
+            e_r, t_r = eval(env, model, e_returns, e_lengths, max_return, agent_logger, current_t=step, current_ep=ep,
+                            gamma=gamma, n=n_evaluations)
             # save raw evaluation returns
             logger.put(f'eval/returns/{n_checkpoints}', e_r, 0, f'{len(e_r)}d')
             # compute e-metric

@@ -58,6 +58,8 @@ def plot_radar(requested_objectives, all_objectives, sorted_objectives, iter_ove
                 angularaxis=dict(categoryarray=columns, rotation=90, tickfont={"size": font_size}))})
 
     for i, split in enumerate(iter_over):
+        print("iterate over", iter_over)
+        print("split", split)
         o_df = full_df[full_df[col_name] == split]
         print(f"{len(o_df)} non-dominated policies over {len(seeds)} seeds")
 
@@ -67,7 +69,8 @@ def plot_radar(requested_objectives, all_objectives, sorted_objectives, iter_ove
                         if TYPE_NOTION[k] == TYPE_NOTION[split] else k) for j, k in enumerate(all_objectives)]
         else:
             print("plot")
-            reqs = split.split(":") if split_per_objective else requested_objectives[0]
+            #reqs = split.split(":") if split_per_objective else requested_objectives[0]
+            reqs = split.split(":") if split_per_objective and isinstance(split, str) else requested_objectives[0]
             all_objs = [f"{o.split('_')[0]}<sub>{o.split('_')[1]}</sub>" if '_' in o else o for o in all_objectives]
             columns = [(f"<span style=\"color:{'black' if plot_policies_different_colours else colour_palette[i]}\">"
                         f"<b>{k}</b></span>" if k in reqs else k) for j, k in enumerate(all_objs)]
