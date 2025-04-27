@@ -297,7 +297,6 @@ def create_fairness_framework_env(args):
     env.action_space = env.env.env.action_space
 
     print(f"Objectives: {obj_string}")
-    exit(1)
     print(f"Scale: {env.scale}")
     print(f"Individual notions: {all_individual_notions}")
     print(f"Scaling: {scaling_factor}")
