@@ -567,12 +567,12 @@ class IndividualFairness(IndividualFairnessBase):
             A = (S + R) / h
 
             term_matrix = A[:, None] + A[None, :]
+            C_diff = np.abs(C_diff)
 
             # Multiply each slice of C_diff by term_matrix and sum over i and j
             fairness = np.sum(C_diff * term_matrix, axis=(1, 2))
             fairness_window += fairness.sum()
-
-        return (0, 0), fairness_window, (0, [], 0)
+        return (0, 0), fairness_window*(-1), (0, [], 0)
 
     def age_based_fairness_through_unawareness(self, history: History, threshold=None, similarity_metric=None,
                                                alpha=None, distance_metric="kl"):
@@ -587,9 +587,7 @@ class IndividualFairness(IndividualFairnessBase):
             reduction_impact = get_reduction_impact(C_diff)          # shape (K, 6)
             risks = state_df["h_risk"].values                       # shape (K,)
             # compute pairwise risk-normalized distances
-            #print("C_DIFF", C_diff)
             D = risk_normalized_distance_matrix(reduction_impact, risks, metric="euclidean")
             # accumulate fairness as sum of distances (zero means perfect proportionality)
             fairness_window += np.sum(D)
-        f = 5 - fairness_window
-        return (0, 0), f, (0, [], 0)
+        return (0, 0), fairness_window*(-1), (0, [], 0)

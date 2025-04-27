@@ -102,10 +102,11 @@ def get_objective(obj):
 
 
 def get_scaling():
-    scales = [800000, 10000, 50., 20, 50, 90, 4e6, 5]
+    # Value ABFTA max ~5 so * episode window is 85
+    scales = [800000, 10000, 50., 20, 50, 90, 24e4, 5]
     scale = np.array(scales)
 
-    ref_points = [-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0, -80e6, -10]
+    ref_points = [-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0, -48e5, -100]
     ref_point = np.array(ref_points)
 
     scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 0.1]]).to(device)
@@ -208,6 +209,8 @@ def create_fairness_framework_env(args):
     np.random.seed(seed)
     torch.manual_seed(seed)
 
+    obj_string = args.objectives
+
     # Check for concatenated arguments for objectives and compute objectives
     _sep = ":"
     if len(args.objectives) == 1 and _sep in args.objectives[0]:
@@ -293,7 +296,8 @@ def create_fairness_framework_env(args):
     env.scale = env.scale
     env.action_space = env.env.env.action_space
 
-    print(f"Objectives: {args.objectives}")
+    print(f"Objectives: {obj_string}")
+    exit(1)
     print(f"Scale: {env.scale}")
     print(f"Individual notions: {all_individual_notions}")
     print(f"Scaling: {scaling_factor}")
@@ -304,7 +308,7 @@ def create_fairness_framework_env(args):
 
     wandb.login(key='d013457b05ccb7e9b3c54f86806d3bd4c7f2384a')
 
-    wandb.init(group=f"SB:SBS{args.window}{all_args_objectives}_budget:{args.budget}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
+    wandb.init(group=f"Test{args.window}{obj_string}_budget:{args.budget}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
 
     return env, model, logdir, ref_point, scaling_factor, max_return
 
