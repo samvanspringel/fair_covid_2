@@ -98,24 +98,28 @@ def generate_fixed_coverage_set(env, fairness, amount_of_policies=100):
         # Reset the environment to the initial state.
         env.reset()
         done = False
-        fairness_states = []
         # Initialize accumulators for the rewards.
-        cumulative_reward = np.array([0.0, 0.0])
+        cumulative_reward = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         # Run simulation for n_steps timesteps.
         while not done:
             obs, reward, done, info = env.step(fixed_action)
-            if fairness == "SBS" or fairness == "ABFTA":
-                fairness_states.append(env.state_df())
+
+            sbs = compute_sbs([env.state_df()])
+
+            abfta = compute_abfta([env.state_df()])
+
+            reward = np.append(reward, [sbs, abfta])
+
             cumulative_reward += reward
         # In your env, r_arh is computed as negative hospitalizations,
         # so flip the sign to get a positive number.
-        hospitalizations = cumulative_reward[0]
-        if fairness == "SBS":
-            y_value = compute_sbs(fairness_states)
-        elif fairness == "ABFTA":
-            y_value = compute_abfta(fairness_states, distance_metric="kl")
+        hospitalizations = cumulative_reward[1]
+        if fairness == "sbs":
+            y_value = cumulative_reward[6]
+        elif fairness == "abfta":
+            y_value = cumulative_reward[7]
         else:
-            y_value = cumulative_reward[1]
+            y_value = cumulative_reward[5]
         policy_results.append([hospitalizations, y_value])
 
     return np.array(policy_results)
@@ -172,15 +176,17 @@ def generate_fixed_coverage_set_new(env, fairness, amount_of_policies=100):
 
 
 if __name__ == '__main__':
-    y_measure = "sb"
-    # env = gym.make(f'BECovidWithLockdownODEContinuous-v0')
-    # coverage_set = generate_fixed_coverage_set_new(env, y_measure, amount_of_policies=100)
-    #
-    #
-    # # Create a DataFrame and save as a CSV file:
-    # df = pd.DataFrame(coverage_set, columns=["hospitalizations", "measure"])
-    # df.to_csv(f"fixed_{y_measure}.csv", index=False)
-    # print(f"Saved fixed policies in fixed_{y_measure}.csv")
-    #plot_coverage_set([f"fixed_{y_measure}.csv"], y_measure)
-    plot_coverage_set(["testcov.csv", "fixed_sb.csv"], y_measure)
+    y_measure = "abfta"
+    env_type = "ODE"
+    budget = 5
+    env = gym.make(f'BECovidWithLockdown{env_type}Budget{budget}Continuous-v0')
+    coverage_set = generate_fixed_coverage_set(env, y_measure, amount_of_policies=100)
+
+
+    # Create a DataFrame and save as a CSV file:
+    df = pd.DataFrame(coverage_set, columns=["hospitalizations", "measure"])
+    df.to_csv(f"fixed_policy_{y_measure}.csv", index=False)
+    print(f"Saved fixed policies in fixed_policy_{y_measure}.csv")
+    plot_coverage_set([f"fixed_policy_{y_measure}.csv"], y_measure)
+    #plot_coverage_set(["testcov.csv", "fixed_sb.csv"], y_measure)
     #plot_coverage_set(["window17.csv", f"fixed_{y_measure}.csv"], "SBS")

@@ -46,7 +46,7 @@ def load_pcn_dataframes(requested_objectives, computed_objectives, all_objective
     #     base_results_dir += f"/team_{team_size}/"
     results_dir = base_results_dir
 
-    budgets = [3, 5]
+    budgets = [5]
 
     all_dataframes = []
 
