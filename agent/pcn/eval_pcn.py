@@ -177,7 +177,7 @@ def eval_pcn(env, model, desired_return, desired_horizon, max_return, objectives
             print(f'- {t.action}')
         t = plot_episode(transitions, alpha)
 
-        scale = np.append(env.scale, [4e6, 85])
+        scale = np.append(env.scale, [24e4, ])
 
         t = t + tuple(zip(*[ti.reward*scale for ti in transitions]))
 

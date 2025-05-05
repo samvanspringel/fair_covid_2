@@ -59,25 +59,19 @@ def risk_normalized_distance_matrix(reduction_matrix: np.ndarray,
     """
     Scale each row by its group's risk and compute pairwise distances.
     """
-    abs_mat = np.abs(reduction_matrix)
+    reduction_matrix = np.abs(reduction_matrix)
     np.set_printoptions(precision=3, suppress=True, linewidth=200)
     #print("Distance matrix D:\n", abs_mat)
-    scaled = abs_mat / (risks[:, None] + eps)
-    n = scaled.shape[0]
+    reduction_matrix_scaled = reduction_matrix / (risks[:, None] + eps)
+    n = reduction_matrix_scaled.shape[0]
     D = np.zeros((n, n))
     for i in range(n):
         for j in range(n):
             if i != j:
-                vi = scaled[i]
-                vj = scaled[j]
+                vi = reduction_matrix_scaled[i]
+                vj = reduction_matrix_scaled[j]
                 if metric == "euclidean":
                     d = np.linalg.norm(vi - vj)
-                elif metric == "l1":
-                    d = np.abs(vi - vj).sum()
-                elif metric == "cosine":
-                    num = np.dot(vi, vj)
-                    den = np.linalg.norm(vi) * np.linalg.norm(vj) + eps
-                    d = 1 - num / den
                 else:
                     raise ValueError(f"Unknown metric {metric}")
             else:
@@ -117,8 +111,19 @@ def _pool_weakly_meritocratic(args):
     return i, is_fair, max_diff
 
 
-def get_reduction_impact(C_diff):
-    return np.sum(C_diff, axis=2).T
+def get_reduction_impact(C_diff, sum_columns: bool = True):
+    """
+    Compute per-group reduction impact over features (columns), or the overall total per group.
+    :param C_diff: 3D array, where summing over axis=2 then transpose yields shape (K, F).
+    :param sum_columns: if True, return 1D array of length K with total reductions per group.
+    :return:
+      - If sum_columns is False: 2D array of shape (K, F), per-group per-feature reductions.
+      - If sum_columns is True: 1D array of shape (K,), sum over features for each group.
+    """
+    reduction_matrix = np.sum(C_diff, axis=2).T     # shape (K, F)
+    if sum_columns:
+        return np.sum(reduction_matrix, axis=1)      # shape (K,)
+    return reduction_matrix
 
 
 def get_reduction_distributions(reduction_matrix, i, j, epsilon=1e-12):
@@ -577,17 +582,27 @@ class IndividualFairness(IndividualFairnessBase):
     def age_based_fairness_through_unawareness(self, history: History, threshold=None, similarity_metric=None,
                                                alpha=None, distance_metric="kl"):
 
-        fairness_window = 0
         states, actions, true_actions, scores, rewards = history.get_history()
 
         if isinstance(distance_metric, tuple):
             distance_metric = distance_metric[0]
 
+        fairness = 15
+
         for state_df, C_diff in states:
-            reduction_impact = get_reduction_impact(C_diff)          # shape (K, 6)
-            risks = state_df["h_risk"].values                       # shape (K,)
-            # compute pairwise risk-normalized distances
-            D = risk_normalized_distance_matrix(reduction_impact, risks, metric="euclidean")
-            # accumulate fairness as sum of distances (zero means perfect proportionality)
-            fairness_window += np.sum(D)
-        return (0, 0), fairness_window*(-1), (0, [], 0)
+            hospitalization_risks = state_df["h_risk"].values                       # shape (K,)
+            reduction_per_age_group = np.abs(get_reduction_impact(C_diff))
+
+            # Normalize to probability distribution (sum to 1)
+            red_sum = np.sum(reduction_per_age_group)
+            red_prob = reduction_per_age_group / (red_sum + 1e-12)
+
+            risk_sum = np.sum(hospitalization_risks)
+            risk_prob = hospitalization_risks / (risk_sum + 1e-12)
+
+            D_diff = np.abs(red_prob[:, None] - red_prob[None, :])
+            d_diff = np.abs(risk_prob[:, None] - risk_prob[None, :])
+            mask = ~np.eye(D_diff.shape[0], dtype=bool)
+            fairness = np.sum(np.abs(D_diff[mask] - d_diff[mask]))
+
+        return (0, 0), fairness*(-1), (0, [], 0)

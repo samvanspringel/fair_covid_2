@@ -808,19 +808,19 @@ if __name__ == "__main__":
     model_paths_dir = "/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/Results"
     budget = 5
     #plot_hospitalization_risk_bar(age_groups, hospitalization_risks)
-    # measure_pcn = "sbs_abfta"
-    #
-    # measure_to_plot = "sbs"
-    # scale_x, scale_y = get_scaling_plot(measure_to_plot)
-    # make_budget_plots(measure_pcn, measure_to_plot, scale_x, scale_y)
+    measure_pcn = "sbs"
 
-    run_episodes = False
-    pids = []
-    goal_hospitalizations = 8000
-    for measure_pcn in all_measures:
-        print(f"Finding policy for {measure_pcn}")
-        policy_id = main(measure_pcn, goal_hospitalizations, run_episodes)
-        pids.append(policy_id)
+    measure_to_plot = "sb"
+    scale_x, scale_y = get_scaling_plot(measure_to_plot)
+    make_budget_plots(measure_pcn, measure_to_plot, scale_x, scale_y)
+
+    # run_episodes = False
+    # pids = []
+    # goal_hospitalizations = 8000
+    # for measure_pcn in all_measures:
+    #     print(f"Finding policy for {measure_pcn}")
+    #     policy_id = main(measure_pcn, goal_hospitalizations, run_episodes)
+    #     pids.append(policy_id)
     #
     # # for i in range(len(age_groups)):
     # #     plot_age_group_comparison(pids, i, all_measures, model_paths_dir, budget)

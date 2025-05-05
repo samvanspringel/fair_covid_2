@@ -100,13 +100,11 @@ def get_objective(obj):
     return obj
 
 
-
 def get_scaling():
-    # Value ABFTA max ~5 so * episode window is 85
-    scales = [800000, 10000, 50., 20, 50, 90, 24e4, 5]
+    scales = [800000, 11000, 50., 20, 50, 120, 24e4, 15]
     scale = np.array(scales)
 
-    ref_points = [-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0, -48e5, -100]
+    ref_points = [-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0, -48e5, -300]
     ref_point = np.array(ref_points)
 
     scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 0.1]]).to(device)
@@ -221,7 +219,7 @@ def create_fairness_framework_env(args):
     all_args_objectives = args.objectives + args.compute_objectives
     ordered_objectives = sorted(all_args_objectives,
                                 key=lambda o: SORTED_OBJECTIVES[get_objective(OBJECTIVES_MAPPING[o])])
-    #args.objectives = [i for i, o in enumerate(ordered_objectives) if o in args.objectives]
+    # args.objectives = [i for i, o in enumerate(ordered_objectives) if o in args.objectives]
 
     args.objectives = [reward_indices[o] for o in args.objectives]
 
@@ -307,7 +305,7 @@ def create_fairness_framework_env(args):
 
     wandb.login(key='d013457b05ccb7e9b3c54f86806d3bd4c7f2384a')
 
-    wandb.init(group=f"W{args.window}O{obj_string}_budget:{args.budget}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
+    wandb.init(group=f"Final_W{args.window}O{obj_string}_budget:{args.budget}", project='fair-pcn-covid', entity='sam-vanspringel-vrije-universiteit-brussel', config={k: v for k, v in vars(args).items()})
 
     return env, model, logdir, ref_point, scaling_factor, max_return
 
