@@ -238,6 +238,118 @@ def test_scenarios(hospitalization_risks):
         print(f"  Metric f = {f:.6f}")
     print("=== End scenario tests ===\n")
 
+def get_reduction_impact(C_diff):
+    return np.sum(C_diff, axis=2).T
+
+
+def kl_divergence(p, q, num_actions):
+    # Numerically‑stable KL divergence with ε‑smoothing to avoid log(0) and division by zero
+    eps = 1e-12
+    p_safe = p + eps
+    q_safe = q + eps
+    # Renormalise so both remain proper probability distributions
+    p_safe /= p_safe.sum()
+    q_safe /= q_safe.sum()
+    return np.sum(p_safe * np.log(p_safe / q_safe))
+
+def hellinger(p, q, num_actions):
+    # Slightly faster computation time
+    if num_actions == 2:
+        sqrt_0_1_2 = np.sqrt(p[0]) - np.sqrt(q[0])
+        sqrt_1_1_2 = np.sqrt(p[1]) - np.sqrt(q[1])
+        total = (sqrt_0_1_2 * sqrt_0_1_2) + (sqrt_1_1_2 * sqrt_1_1_2)
+        h_dist = np.sqrt(total) / SQRT2
+    else:
+        total = 0
+        for i in range(num_actions):
+            sqrt1_2 = np.sqrt(p[i]) - np.sqrt(q[i])
+            total += (sqrt1_2 * sqrt1_2)
+        h_dist = np.sqrt(total) / SQRT2
+    return h_dist
+
+def make_test_reduction_matrices():
+    mats = {"fair, same risk same distribution": np.array([
+        [0.2, 0.0, 0.3, 0.2, 0.0, 0.3],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.2, 0.0, 0.3, 0.2, 0.0, 0.3],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.1, 0.3, 0.0, 0.5, 0.1, 0.0],
+        [0.0, 0.2, 0.0, 0.0, 0.4, 0.4],
+        [0.1, 0.3, 0.0, 0.5, 0.1, 0.0],
+        [0.0, 0.2, 0.0, 0.0, 0.4, 0.4]
+    ]), "unfair, same risks different distribution": np.array([
+        [0.2, 0.0, 0.3, 0.2, 0.0, 0.3],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.7, 0.1, 0.0, 0.2, 0.0],
+        [0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+        [0.1, 0.3, 0.0, 0.5, 0.1, 0.0],
+        [0.4, 0.1, 0.3, 0.1, 0.1, 0.0],
+        [0.1, 0.3, 0.0, 0.5, 0.1, 0.0],
+        [0.0, 0.2, 0.0, 0.0, 0.4, 0.4]
+    ]),
+    "unfair, one reduction": np.array([
+        [0.0, 0.0, 0.1, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 1],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 1],
+        [0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+        [0.0, 1, 0.0, 0.0, 0.0, 0.0],
+        [1, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+        [0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+    ])
+    }
+
+    return mats
+
+
+def run_fairness_on_test_matrices():
+    """Compute the fairness metric for each crafted matrix."""
+    mats = make_test_reduction_matrices()
+    risk = np.array([0.07977, 0.02279, 0.04558, 0.03704, 0.06553, 0.08262, 0.11966, 0.21083, 0.12536, 0.21083])
+    risk_prob = risk / risk.sum()
+
+    print("\n=== Manual scenario fairness checks ===")
+    for name, red in mats.items():
+        reduction_per_age_group = red
+
+        # 1) Normalize reduction_per_age_group so each of the 10 rows sums to 1
+        reduction_sums = reduction_per_age_group.sum(axis=1, keepdims=True)
+        reduction_sums[reduction_sums == 0] = 1e-12
+        reduction_distributions = reduction_per_age_group / reduction_sums
+
+        # 2) Construct pair‑wise KL‑divergence matrix
+        K = reduction_distributions.shape[0]
+        KL_D = np.zeros((K, K))
+        for i in range(K):
+            for j in range(K):
+                KL_D[i, j] = hellinger(reduction_distributions[i], reduction_distributions[j], 0)
+
+        # 3) Convert hospitalization_risks to a probability distribution
+
+        KL_D_MAX = 28
+        KL_D_MIN = 0
+
+        # 4) Construct the pair‑wise risk‑difference matrix
+        H_d = np.abs(np.subtract.outer(risk_prob, risk_prob))  # element (i,j) = risk_prob[i] - risk_prob[j]
+
+        H_d_MAX = H_d.max()
+        H_d_MIN = H_d.min()
+
+        KL_D_scaled = ((KL_D - KL_D_MIN) / (KL_D_MAX - KL_D_MIN)) * (H_d_MAX - H_d_MIN) + H_d_MIN
+
+        # 6) Aggregate difference between scaled KL and risk differences (off‑diagonal only)
+        mask_off_diag = ~np.eye(K, dtype=bool)
+        fairness = np.sum(np.abs(KL_D_scaled[mask_off_diag] - H_d[mask_off_diag]))
+        print(f"Scenario '{name}': fairness = {fairness:.4f}")
+    print("=== End checks ===\n")
+
+
 def env_random_demo():
     import gym
     from fairness.individual.individual_fairness import get_reduction_impact
@@ -249,8 +361,8 @@ def env_random_demo():
 
 
     # run our fixed scenario tests once
-    hospitalization_risks = env.model.get_hospitalization_risk()
-    #test_scenarios(hospitalization_risks)
+
+    run_fairness_on_test_matrices()
     max_f = 0
     min_f = 100000
     step = 0
@@ -260,53 +372,48 @@ def env_random_demo():
 
         while not done:
             step += 1
-            print(f"Step: {step} --- Max: {max_f}")
+            print(f"Step: {step} --- Max: {max_f} --- Min: {min_f}")
             a = env.action_space.sample()
             obs, reward, done, info = env.step(a)
 
-            reduction_per_age_group = np.abs(get_reduction_impact(env.C_diff_fairness))
             hospitalization_risks = env.model.get_hospitalization_risk()
+            reduction_per_age_group = np.abs(get_reduction_impact(env.C_diff_fairness))
 
-            # Convert to positive totals per group (already abs):
-            red = reduction_per_age_group
-            # Normalize to probability distribution (sum to 1)
-            red_sum = np.sum(red)
-            red_prob = red / (red_sum + 1e-12)
-            # print("Reductions per age-group:", red)
-            # print("Reduction distribution (sum=1):", red_prob)
+            # 1) Normalize reduction_per_age_group so each of the 10 rows sums to 1
+            reduction_sums = reduction_per_age_group.sum(axis=1, keepdims=True)
+            reduction_sums[reduction_sums == 0] = 1e-12
+            reduction_distributions = reduction_per_age_group / reduction_sums
 
-            # Normalize hospitalization risks to probability distribution
-            risk = hospitalization_risks
-            risk_sum = np.sum(risk)
-            risk_prob = risk / (risk_sum + 1e-12)
-            # print("Hospitalization risks:", risk)
-            # print("Risk distribution (sum=1):", risk_prob)
-            # f = 0
-            # for i in range(len(red_prob)):
-            #     for j in range(len(risk_prob)):
-            #         if i != j:
-            #             D = np.abs(red_prob[j] - red_prob[i])
-            #             d = np.abs(risk_prob[j] - risk_prob[i])
-            #             f += np.abs(d - D)
-            # print("Original: ", f)
+            # 2) Construct pair‑wise KL‑divergence matrix
+            K = reduction_distributions.shape[0]
+            KL_D = np.zeros((K, K))
+            for i in range(K):
+                for j in range(K):
+                    KL_D[i, j] = kl_divergence(reduction_distributions[i], reduction_distributions[j], 0)
 
-            # optimized computation of f via vectorized differences
-            D_diff = np.abs(red_prob[:, None] - red_prob[None, :])
-            d_diff = np.abs(risk_prob[:, None] - risk_prob[None, :])
-            mask = ~np.eye(D_diff.shape[0], dtype=bool)
-            f = np.sum(np.abs(D_diff[mask] - d_diff[mask]))
+            # 3) Convert hospitalization_risks to a probability distribution
+            risk_prob = hospitalization_risks / (hospitalization_risks.sum() + 1e-12)
 
-            if f > max_f:
-                max_f = f
-            if f < min_f:
-                min_f = f
+            KL_D_MAX = 28
+            KL_D_MIN = 0
+
+            # 4) Construct the pair‑wise risk‑difference matrix
+            H_d = np.abs(np.subtract.outer(risk_prob, risk_prob))  # element (i,j) = risk_prob[i] - risk_prob[j]
+
+            H_d_MAX = H_d.max()
+            H_d_MIN = H_d.min()
+
+            KL_D_scaled = ((KL_D - KL_D_MIN) / (KL_D_MAX - KL_D_MIN)) * (H_d_MAX - H_d_MIN) + H_d_MIN
+
+            # 6) Aggregate difference between scaled KL and risk differences (off‑diagonal only)
+            mask_off_diag = ~np.eye(K, dtype=bool)
+            fairness = np.sum(np.abs(KL_D_scaled[mask_off_diag] - H_d[mask_off_diag]))
 
 
-    print("Max: ", max_f)
-    print("Min: ", min_f)
-
-
-
+            if fairness > max_f:
+                max_f = fairness
+            if fairness < min_f:
+                min_f = fairness
 
 
 

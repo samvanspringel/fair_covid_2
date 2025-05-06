@@ -101,10 +101,10 @@ def get_objective(obj):
 
 
 def get_scaling():
-    scales = [800000, 11000, 50., 20, 50, 120, 24e4, 15]
+    scales = [800000, 11000, 50., 20, 50, 120, 24e4, 8]
     scale = np.array(scales)
 
-    ref_points = [-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0, -48e5, -300]
+    ref_points = [-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0, -48e5, -160]
     ref_point = np.array(ref_points)
 
     scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 0.1]]).to(device)

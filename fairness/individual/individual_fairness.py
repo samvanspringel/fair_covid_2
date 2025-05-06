@@ -14,6 +14,8 @@ from fairness.individual import IndividualNotion, IndividualFairnessBase
 from fairness.individual.individual_deque import IndividualDeque
 from fairness.individual.swinn.optimised_swinn import OptimisedSWINN
 
+KL_D_MAX = 28
+KL_D_MIN = 0
 
 def dict_to_array(d):
     a = []
@@ -111,19 +113,8 @@ def _pool_weakly_meritocratic(args):
     return i, is_fair, max_diff
 
 
-def get_reduction_impact(C_diff, sum_columns: bool = True):
-    """
-    Compute per-group reduction impact over features (columns), or the overall total per group.
-    :param C_diff: 3D array, where summing over axis=2 then transpose yields shape (K, F).
-    :param sum_columns: if True, return 1D array of length K with total reductions per group.
-    :return:
-      - If sum_columns is False: 2D array of shape (K, F), per-group per-feature reductions.
-      - If sum_columns is True: 1D array of shape (K,), sum over features for each group.
-    """
-    reduction_matrix = np.sum(C_diff, axis=2).T     # shape (K, F)
-    if sum_columns:
-        return np.sum(reduction_matrix, axis=1)      # shape (K,)
-    return reduction_matrix
+def get_reduction_impact(C_diff):
+    return np.sum(C_diff, axis=2).T
 
 
 def get_reduction_distributions(reduction_matrix, i, j, epsilon=1e-12):
@@ -584,25 +575,42 @@ class IndividualFairness(IndividualFairnessBase):
 
         states, actions, true_actions, scores, rewards = history.get_history()
 
-        if isinstance(distance_metric, tuple):
-            distance_metric = distance_metric[0]
+        if distance_metric == "kl":
+            distance_function = kl_divergence
+        else:
+            distance_function = hellinger
 
-        fairness = 15
+        fairness = 8
 
         for state_df, C_diff in states:
             hospitalization_risks = state_df["h_risk"].values                       # shape (K,)
             reduction_per_age_group = np.abs(get_reduction_impact(C_diff))
 
-            # Normalize to probability distribution (sum to 1)
-            red_sum = np.sum(reduction_per_age_group)
-            red_prob = reduction_per_age_group / (red_sum + 1e-12)
+            # 1) Normalize reduction_per_age_group so each of the 10 rows sums to 1
+            reduction_sums = reduction_per_age_group.sum(axis=1, keepdims=True)
+            reduction_sums[reduction_sums == 0] = 1e-12
+            reduction_distributions = reduction_per_age_group / reduction_sums
 
-            risk_sum = np.sum(hospitalization_risks)
-            risk_prob = hospitalization_risks / (risk_sum + 1e-12)
+            # 2) Construct pair‑wise KL‑divergence matrix
+            K = reduction_distributions.shape[0]
+            KL_D = np.zeros((K, K))
+            for i in range(K):
+                for j in range(K):
+                    KL_D[i, j] = distance_function(reduction_distributions[i], reduction_distributions[j], 0)
 
-            D_diff = np.abs(red_prob[:, None] - red_prob[None, :])
-            d_diff = np.abs(risk_prob[:, None] - risk_prob[None, :])
-            mask = ~np.eye(D_diff.shape[0], dtype=bool)
-            fairness = np.sum(np.abs(D_diff[mask] - d_diff[mask]))
+            # 3) Convert hospitalization_risks to a probability distribution
+            risk_prob = hospitalization_risks / (hospitalization_risks.sum() + 1e-12)
+
+            # 4) Construct the pair‑wise risk‑difference matrix
+            H_d = np.abs(np.subtract.outer(risk_prob, risk_prob))  # element (i,j) = risk_prob[i] - risk_prob[j]
+
+            H_d_MAX = H_d.max()
+            H_d_MIN = H_d.min()
+
+            KL_D_scaled = ((KL_D - KL_D_MIN) / (KL_D_MAX - KL_D_MIN)) * (H_d_MAX - H_d_MIN) + H_d_MIN
+
+            # 6) Aggregate difference between scaled KL and risk differences (off‑diagonal only)
+            mask_off_diag = ~np.eye(K, dtype=bool)
+            fairness = np.sum(np.abs(KL_D_scaled[mask_off_diag] - H_d[mask_off_diag]))
 
         return (0, 0), fairness*(-1), (0, [], 0)
