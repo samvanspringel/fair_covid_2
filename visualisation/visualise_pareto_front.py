@@ -77,14 +77,17 @@ def plot_fixed_data(measure):
     Reads in fixed.csv (assumes two columns: x and y) and plots its data using plt.scatter.
     """
     df_fixed = pd.read_csv(f"fixed_policy_{measure}.csv")
-    # Check if mean of first column > 3000, and scale if needed
-    if 'o_0' in df_fixed.columns and 'o_1' in df_fixed.columns:
-        x = df_fixed['o_0'].values
-        y = df_fixed['o_1'].values
+
+    if len(df_fixed.columns) == 2:
+        if 'o_0' in df_fixed.columns and 'o_1' in df_fixed.columns:
+            x = df_fixed['o_0'].values
+            y = df_fixed['o_1'].values
+        else:
+            x = df_fixed.iloc[:, 0].values
+            y = df_fixed.iloc[:, 1].values
+        plt.scatter(x, y, s=50, alpha=0.7, edgecolors='k', label="fixed", marker='o')
     else:
-        x = df_fixed.iloc[:, 0].values
-        y = df_fixed.iloc[:, 1].values
-    plt.scatter(x, y, s=50, alpha=0.7, edgecolors='k', label="fixed", marker='o')
+        pass
 
 
 def plot_pareto_front_from_dir(measure, measure_to_plot, logdir, budget_label, scale_x=10000, scale_y=90,
@@ -265,13 +268,36 @@ def compute_sbs(states):
 def compute_abfta(states):
     fairness_window = 0
     for state_df, C_diff in states:
-        reduction_impact = get_reduction_impact(C_diff)  # shape (K, 6)
-        risks = state_df["h_risk"].values  # shape (K,)
-        # compute pairwise risk-normalized distances
-        D = risk_normalized_distance_matrix(reduction_impact, risks, metric="euclidean")
-        # accumulate fairness as sum of distances (zero means perfect proportionality)
-        fairness_window += np.sum(D)
-    return fairness_window * (-1)
+        hospitalization_risks = state_df["h_risk"].values  # shape (K,)
+        reduction_per_age_group = np.abs(get_reduction_impact(C_diff))
+
+        # 1) Normalize reduction_per_age_group so each of the 10 rows sums to 1
+        reduction_sums = reduction_per_age_group.sum(axis=1, keepdims=True)
+        reduction_sums[reduction_sums == 0] = 1e-12
+        reduction_distributions = reduction_per_age_group / reduction_sums
+
+        # 2) Construct pair‑wise KL‑divergence matrix
+        K = reduction_distributions.shape[0]
+        KL_D = np.zeros((K, K))
+        for i in range(K):
+            for j in range(K):
+                KL_D[i, j] = kl_divergence(reduction_distributions[i], reduction_distributions[j], 0)
+
+        # 3) Convert hospitalization_risks to a probability distribution
+        risk_prob = hospitalization_risks / (hospitalization_risks.sum() + 1e-12)
+
+        # 4) Construct the pair‑wise risk‑difference matrix
+        H_d = np.abs(np.subtract.outer(risk_prob, risk_prob))  # element (i,j) = risk_prob[i] - risk_prob[j]
+
+        H_d_MAX = H_d.max()
+        H_d_MIN = H_d.min()
+
+        KL_D_scaled = ((KL_D - KL_D_MIN) / (KL_D_MAX - KL_D_MIN)) * (H_d_MAX - H_d_MIN) + H_d_MIN
+
+        # 6) Aggregate difference between scaled KL and risk differences (off‑diagonal only)
+        mask_off_diag = ~np.eye(K, dtype=bool)
+        fairness = np.sum(np.abs(KL_D_scaled[mask_off_diag] - H_d[mask_off_diag])) / ((K * K) - K)
+    return fairness * (-1)
 
 
 def evaluate_pcn(measure, model_dir, objectives, save_dir):

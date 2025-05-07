@@ -121,12 +121,17 @@ def generate_fixed_coverage_set(env, fairness, amount_of_policies=100):
         # so flip the sign to get a positive number.
         hospitalizations = cumulative_reward[1]
         if fairness == "sbs":
-            y_value = cumulative_reward[6]
+            y_values = [cumulative_reward[6]]
         elif fairness == "abfta":
-            y_value = cumulative_reward[7]
+            y_values = [cumulative_reward[7]]
+        elif fairness == "sb_sbs":
+            y_values = [cumulative_reward[5], cumulative_reward[6]]
+        elif fairness == "sbs_abfta":
+            y_values = [cumulative_reward[6], cumulative_reward[7]]
         else:
-            y_value = cumulative_reward[5]
-        policy_results.append([hospitalizations, y_value])
+            y_values = [cumulative_reward[5]]
+
+        policy_results.append([hospitalizations] + y_values)
 
     return np.array(policy_results)
 
@@ -420,23 +425,24 @@ def env_random_demo():
 
 
 
-
-
-
-if __name__ == "__main__":
-    env_random_demo()
-
 if __name__ == '__main__':
-    y_measure = "abfta"
+    #env_random_demo()
+    y_measure = "sbs_abfta"
     env_type = "ODE"
     budget = 5
-    env = gym.make(f'BECovidWithLockdown{env_type}Budget{budget}Continuous-v0')
-    # coverage_set = generate_fixed_coverage_set(env, y_measure, amount_of_policies=100)
+    if budget == None:
+        env = gym.make(f'BECovidWithLockdown{env_type}Continuous-v0')
+    else:
+        env = gym.make(f'BECovidWithLockdown{env_type}Budget{budget}Continuous-v0')
+    coverage_set = generate_fixed_coverage_set(env, y_measure, amount_of_policies=100)
 
     # Create a DataFrame and save as a CSV file:
-    # df = pd.DataFrame(coverage_set, columns=["hospitalizations", "measure"])
-    # df.to_csv(f"fixed_policy_{y_measure}.csv", index=False)
-    # print(f"Saved fixed policies in fixed_policy_{y_measure}.csv")
+    if coverage_set.shape[1] == 2:
+        df = pd.DataFrame(coverage_set, columns=["hospitalizations", "measure"])
+    else:
+        df = pd.DataFrame(coverage_set, columns=["hospitalizations", "measure1", "measure2"])
+    df.to_csv(f"fixed_policy_{y_measure}.csv", index=False)
+    print(f"Saved fixed policies in fixed_policy_{y_measure}.csv")
     # plot_coverage_set([f"fixed_policy_{y_measure}.csv"], y_measure)
     # plot_coverage_set(["testcov.csv", "fixed_sb.csv"], y_measure)
     # plot_coverage_set(["window17.csv", f"fixed_{y_measure}.csv"], "SBS")

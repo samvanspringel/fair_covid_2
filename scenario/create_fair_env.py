@@ -359,7 +359,7 @@ fMDP_parser.add_argument('--wandb', default=1, type=int,
                          help="(Ignored, overrides to 0) use wandb for loggers or save local only")
 fMDP_parser.add_argument('--no_window', default=0, type=int, help="Use the full history instead of a window")
 fMDP_parser.add_argument('--no_individual', default=0, type=int, help="No individual fairness notions")
-fMDP_parser.add_argument('--distance_metrics', default="kl", type=str, nargs='*',
+fMDP_parser.add_argument('--distance_metrics', default=['kl', 'kl'], type=str, nargs='*',
                          help='The distance metric to use for every individual fairness notion specified. '
                               'The distance metrics should be supplied for each individual fairness in the objectives, '
                               'then followed by computed objectives. Can be supplied as a single string, with the '
