@@ -352,9 +352,11 @@ def run_fairness_on_test_matrices():
 
 def env_random_demo():
     import gym
+    from itertools import product
+
     from fairness.individual.individual_fairness import get_reduction_impact
 
-    env = gym.make("BECovidWithLockdownODEBudget5Continuous-v0")
+    env = gym.make("BECovidWithLockdownODEBudget2Continuous-v0")
 
     np.set_printoptions(precision=5, suppress=True, linewidth=400)
     n_samples = 1000000
@@ -363,16 +365,18 @@ def env_random_demo():
     # run our fixed scenario tests once
 
     run_fairness_on_test_matrices()
+    max_KL = 0
     max_f = 0
     min_f = 100000
     step = 0
-    for _ in range(n_samples):
+    values = np.round(np.linspace(0.0, 1.0, 80), decimals=2)
+    #actions = np.array(list(product(values, repeat=3)))
+    i = 0
+    while True:
         env.reset()
         done = False
-
         while not done:
             step += 1
-            print(f"Step: {step} --- Max: {max_f} --- Min: {min_f}")
             a = env.action_space.sample()
             obs, reward, done, info = env.step(a)
 
@@ -394,9 +398,6 @@ def env_random_demo():
             # 3) Convert hospitalization_risks to a probability distribution
             risk_prob = hospitalization_risks / (hospitalization_risks.sum() + 1e-12)
 
-            KL_D_MAX = 28
-            KL_D_MIN = 0
-
             # 4) Construct the pair‑wise risk‑difference matrix
             H_d = np.abs(np.subtract.outer(risk_prob, risk_prob))  # element (i,j) = risk_prob[i] - risk_prob[j]
 
@@ -407,13 +408,16 @@ def env_random_demo():
 
             # 6) Aggregate difference between scaled KL and risk differences (off‑diagonal only)
             mask_off_diag = ~np.eye(K, dtype=bool)
-            fairness = np.sum(np.abs(KL_D_scaled[mask_off_diag] - H_d[mask_off_diag]))
+            fairness = np.sum(np.abs(KL_D_scaled[mask_off_diag] - H_d[mask_off_diag]))/((K*K)-K)
 
-
+            print(f"Action: {a} --- Step: {step} --- Fairness: {fairness}")
             if fairness > max_f:
                 max_f = fairness
             if fairness < min_f:
                 min_f = fairness
+
+            step += 1
+
 
 
 

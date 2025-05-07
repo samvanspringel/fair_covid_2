@@ -34,8 +34,12 @@ def key_state(s):
 SQRT2 = np.sqrt(2)
 
 def kl_divergence(p, q, num_actions):
-    kl_ij = np.sum(p * np.log(p / q))
-    return kl_ij
+    eps = 1e-12
+    p_safe = p + eps
+    q_safe = q + eps
+    p_safe /= p_safe.sum()
+    q_safe /= q_safe.sum()
+    return np.sum(p_safe * np.log(p_safe / q_safe))
 
 def hellinger(p, q, num_actions):
     # Slightly faster computation time
@@ -574,13 +578,12 @@ class IndividualFairness(IndividualFairnessBase):
                                                alpha=None, distance_metric="kl"):
 
         states, actions, true_actions, scores, rewards = history.get_history()
-
-        if distance_metric == "kl":
+        if distance_metric[0] == "kl":
             distance_function = kl_divergence
         else:
             distance_function = hellinger
 
-        fairness = 8
+        fairness = 0.08
 
         for state_df, C_diff in states:
             hospitalization_risks = state_df["h_risk"].values                       # shape (K,)
@@ -611,6 +614,6 @@ class IndividualFairness(IndividualFairnessBase):
 
             # 6) Aggregate difference between scaled KL and risk differences (off‑diagonal only)
             mask_off_diag = ~np.eye(K, dtype=bool)
-            fairness = np.sum(np.abs(KL_D_scaled[mask_off_diag] - H_d[mask_off_diag]))
+            fairness = np.sum(np.abs(KL_D_scaled[mask_off_diag] - H_d[mask_off_diag]))/((K*K)-K)
 
         return (0, 0), fairness*(-1), (0, [], 0)

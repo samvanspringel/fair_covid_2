@@ -101,10 +101,10 @@ def get_objective(obj):
 
 
 def get_scaling():
-    scales = [800000, 11000, 50., 20, 50, 120, 24e4, 8]
+    scales = [800000, 11000, 50., 20, 50, 120, 24e4, 0.08]
     scale = np.array(scales)
 
-    ref_points = [-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0, -48e5, -160]
+    ref_points = [-15000000, -200000, -1000.0, -1000.0, -1000.0, -1000.0, -48e5, -1.6]
     ref_point = np.array(ref_points)
 
     scaling_factor = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 0.1]]).to(device)
@@ -359,7 +359,7 @@ fMDP_parser.add_argument('--wandb', default=1, type=int,
                          help="(Ignored, overrides to 0) use wandb for loggers or save local only")
 fMDP_parser.add_argument('--no_window', default=0, type=int, help="Use the full history instead of a window")
 fMDP_parser.add_argument('--no_individual', default=0, type=int, help="No individual fairness notions")
-fMDP_parser.add_argument('--distance_metrics', default=['kl', 'kl'], type=str, nargs='*',
+fMDP_parser.add_argument('--distance_metrics', default="kl", type=str, nargs='*',
                          help='The distance metric to use for every individual fairness notion specified. '
                               'The distance metrics should be supplied for each individual fairness in the objectives, '
                               'then followed by computed objectives. Can be supplied as a single string, with the '
