@@ -591,7 +591,7 @@ class IndividualFairness(IndividualFairnessBase):
 
             # 1) Normalize reduction_per_age_group so each of the 10 rows sums to 1
             reduction_sums = reduction_per_age_group.sum(axis=1, keepdims=True)
-            reduction_sums[reduction_sums == 0] = 1e-12
+            reduction_sums[reduction_sums == 0] = 1e-3
             reduction_distributions = reduction_per_age_group / reduction_sums
 
             # 2) Construct pair‑wise KL‑divergence matrix

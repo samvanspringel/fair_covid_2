@@ -35,7 +35,7 @@ def load_pcn_log(results_dir, is_fraud, steps, budget, bias, distance, window, o
     return df
 
 
-def load_pcn_dataframes(requested_objectives, computed_objectives, all_objectives, sorted_objectives,
+def load_pcn_dataframes(budgets, requested_objectives, computed_objectives, all_objectives, sorted_objectives,
                         seeds, steps, pcn_idx, base_results_dir, is_fraud, n_transactions, fraud_proportion, team_size,
                         populations, distances, windows, biases):
     # env_name = "fraud_detection" if is_fraud else "job_hiring"
@@ -45,8 +45,6 @@ def load_pcn_dataframes(requested_objectives, computed_objectives, all_objective
     # else:
     #     base_results_dir += f"/team_{team_size}/"
     results_dir = base_results_dir
-
-    budgets = [5]
 
     all_dataframes = []
 
@@ -119,7 +117,7 @@ def get_splits(env_name, populations, distances, windows, biases, requested_obje
     split_per_objective = plot_single_objective or not any([split_per_population, split_per_bias,
                                                             split_per_distance, split_per_window])
     plot_legend_as_subtitles = True
-    skip_subtitle = False
+    skip_subtitle = True
 
     # Currently, only one type of split is supported
     all_splits = (split_per_objective, split_per_bias, split_per_distance, split_per_window, split_per_population)
@@ -294,28 +292,63 @@ def get_diffs(dataframe, processes=4, chunk_size=64):
     return differences
 
 
-def find_representative_subset(dataframe, labels, all_objectives, seeds, processes=4, chunk_size=64):
-    sorted_o_df = dataframe.sort_values(by=labels, ascending=False)[labels]
+def find_representative_subset(dataframe, labels, all_objectives, seeds, use_uniform_spread=False,
+                               processes=4, chunk_size=64):
+    sorting_objectives = ["ARH", "SB", "ARI", "SBS", "ABFTA"]
+    sorted_o_df = dataframe.sort_values(by=sorting_objectives, ascending=False)[sorting_objectives]
+
+    if use_uniform_spread:
+        # --- 1) pick the single best policy for each requested objective -----------
+        # map spelling differences → column names in the dataframe
+        alias = {"SBF": "SBS", "ABFTU": "ABFTA"}
+        repr_idx = []
+        for obj in labels[0]:
+            col = alias.get(obj, obj)  # fall back to the name itself
+            print(f"\nObjective: {col}")
+            print(max(sorted_o_df[col]))
+            idx_best = sorted_o_df[col].idxmax()
+            print(f"Selected best index: {idx_best} with value: {sorted_o_df.loc[idx_best, col]}")
+            repr_idx.append(idx_best)
+
+        # remove duplicates while preserving order
+        repr_idx = list(dict.fromkeys(repr_idx))
+
+        # --- 2) top-up so that we always return *exactly* 5 policies ---------------
+        n_needed = 5 - len(repr_idx)
+        if n_needed > 0:
+            remaining = sorted_o_df.drop(index=repr_idx)
+
+            # even spacing through the remaining frame ensures diversity
+            step = max(1, len(remaining) // n_needed)
+            extra_idx = remaining.iloc[::step].index.tolist()[:n_needed]
+            repr_idx.extend(extra_idx)
+
+        print("Selected policies: ", repr_idx)
+        return repr_idx[:5]
+    # ------------------------------------------------------------------
     # Compute the extrema for each objective, to find the range of values
     max_objectives = sorted_o_df.max()
     min_objectives = sorted_o_df.min()
     range_obj = max_objectives - min_objectives
 
-    min_improvement = len(all_objectives) - 1  # number of objectives that must differ enough
+
+
+    min_improvement = len(labels)
     highlight_indices = set()
     sums = sorted_o_df.to_numpy(float)
     sums = np.sum(sums, axis=1)
     highlight_indices.add(int(sorted_o_df.iloc[np.argmax(sums)].name))
 
     differences = get_diffs(sorted_o_df[labels], processes=processes, chunk_size=chunk_size)
-    multiplier = 1.0  # 0.5
-    delta = 0.5  # 0.05
+    multiplier = 0.5  # 0.5
+    delta = 0.05
 
     best_found = None
     tries = 0
     max_tries = 50
-    _min_p = 5
-    _max_p = 12
+    # adjust desired number of representative policies
+    _min_p = 2   # minimum number of policies to keep
+    _max_p = 5   # maximum number of policies to keep
 
     while (tries <= max_tries) and (len(highlight_indices) < _min_p or len(highlight_indices) > _max_p):
         threshold = range_obj.values * multiplier

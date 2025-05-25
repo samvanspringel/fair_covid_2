@@ -23,44 +23,65 @@ def compute_sbs(states):
         A = (S + R) / h
 
         term_matrix = A[:, None] + A[None, :]
+        C_diff = np.abs(C_diff)
 
         # Multiply each slice of C_diff by term_matrix and sum over i and j
         fairness = np.sum(C_diff * term_matrix, axis=(1, 2))
         fairness_window += fairness.sum()
-    return fairness_window
+    return fairness_window * (-1)
+
 
 def compute_abfta(states):
-    fairness_window = 0
+    fairness = 0
     for state_df, C_diff in states:
-        reduction_impact = get_reduction_impact(C_diff)  # shape (K, 6)
-        risks = state_df["h_risk"].values  # shape (K,)
-        # compute pairwise risk-normalized distances
-        # print("C_DIFF", C_diff)
-        D = risk_normalized_distance_matrix(reduction_impact, risks, metric="euclidean")
-        # accumulate fairness as sum of distances (zero means perfect proportionality)
-        fairness_window += np.sum(D)
-    f = 5 - fairness_window
-    return f
+        hospitalization_risks = state_df["h_risk"].values  # shape (K,)
+        reduction_per_age_group = np.abs(get_reduction_impact(C_diff))
+
+        # 1) Normalize reduction_per_age_group so each of the 10 rows sums to 1
+        reduction_sums = reduction_per_age_group.sum(axis=1, keepdims=True)
+        reduction_sums[reduction_sums == 0] = 1e-12
+        reduction_distributions = reduction_per_age_group / reduction_sums
+
+        # 2) Construct pair‑wise KL‑divergence matrix
+        K = reduction_distributions.shape[0]
+        KL_D = np.zeros((K, K))
+        for i in range(K):
+            for j in range(K):
+                KL_D[i, j] = kl_divergence(reduction_distributions[i], reduction_distributions[j], 0)
+
+        # 3) Convert hospitalization_risks to a probability distribution
+        risk_prob = hospitalization_risks / (hospitalization_risks.sum() + 1e-12)
+
+        # 4) Construct the pair‑wise risk‑difference matrix
+        H_d = np.abs(np.subtract.outer(risk_prob, risk_prob))  # element (i,j) = risk_prob[i] - risk_prob[j]
+
+        H_d_MAX = H_d.max()
+        H_d_MIN = H_d.min()
+
+        KL_D_scaled = ((KL_D - KL_D_MIN) / (KL_D_MAX - KL_D_MIN)) * (H_d_MAX - H_d_MIN) + H_d_MIN
+
+        # 6) Aggregate difference between scaled KL and risk differences (off‑diagonal only)
+        mask_off_diag = ~np.eye(K, dtype=bool)
+        fairness = np.sum(np.abs(KL_D_scaled[mask_off_diag] - H_d[mask_off_diag])) / ((K * K) - K)
+    return fairness * (-1)
 
 def run_episode(env, model, desired_return, desired_horizon, max_return, fairness_notion):
     transitions = []
     obs = env.reset()
     done = False
     lost_contacts_per_age = []
-    fairness_states = []
+    lost_matrices = []
     while not done:
         action = choose_action(model, obs, desired_return, desired_horizon, eval=True)
         n_obs, reward, done, info = env.step(action)
         if 'action' in info:
             action = info['action']
 
-        fairness_states.append(env.state_df())
+        sbs = compute_sbs([env.state_df()])
+        sbs /= 24e4
 
-        sbs = compute_sbs(fairness_states)
-        sbs /= 4e6
-
-        abfta = compute_abfta(fairness_states)
-        abfta /= 85
+        abfta = compute_abfta([env.state_df()])
+        abfta /= 1
 
         reward = np.append(reward, [sbs, abfta])
 
@@ -72,14 +93,15 @@ def run_episode(env, model, desired_return, desired_horizon, max_return, fairnes
             terminal=done
         ))
 
-        lost_contacts_per_age.append(info["lost_contacts_per_age"].tolist())
+        lost_contacts_per_age.append(info["prop_lost_contacts_per_age"].tolist())
+        lost_matrices.append(info["inter_lost_contacts"])
 
         obs = n_obs
 
         desired_return = np.clip(desired_return-reward, None, max_return, dtype=np.float32)
         # clip desired horizon to avoid negative horizons
         desired_horizon = np.float32(max(desired_horizon-1, 1.))
-    return transitions, lost_contacts_per_age
+    return transitions, lost_contacts_per_age, lost_matrices
 
 
 def run_fixed_episode(env, actions, desired_return, desired_horizon, max_return):
@@ -125,7 +147,7 @@ def plot_episode(transitions, alpha=1.):
     actions = np.concatenate((actions, [[None]*3]))
 
     # steps in dates
-    start = datetime.date(2020, 5, 3)
+    start = datetime.date(2020, 3, 1)
     week = datetime.timedelta(days=7)
     dates = [start+week*i for i in range(0, 18, 2)]
 
@@ -165,7 +187,7 @@ def eval_pcn(env, model, desired_return, desired_horizon, max_return, objectives
     returns = np.empty((n, desired_return.shape[-1]))
     all_transitions = []
     for n_i in range(n):
-        transitions, lost_contacts_per_age = run_episode(env, model, desired_return, desired_horizon, max_return, measure)
+        transitions, lost_contacts_per_age, lost_matrices = run_episode(env, model, desired_return, desired_horizon, max_return, measure)
         # compute return
         for i in reversed(range(len(transitions)-1)):
             transitions[i].reward += gamma * transitions[i+1].reward
@@ -183,10 +205,11 @@ def eval_pcn(env, model, desired_return, desired_horizon, max_return, objectives
 
         df = pd.DataFrame([x for x in zip(*t)], columns=['dates', 'ari', 'i_hosp_new', 'i_icu_new', 'd_new', 'p_w', 'p_s', 'p_l'] + [f'o_{oi}' for oi in range(returns.shape[1])])
         # manually set p_s to 0 during school holidays
-        holidays = df['dates'] >= datetime.date(2020, 7, 1)
-        df.loc[holidays, 'p_s'] = 0
+        #holidays = df['dates'] >= datetime.date(2020, 7, 1)
+        #df.loc[holidays, 'p_s'] = 0
         # serialize lost_contacts_per_age as JSON strings for easier reading later
         df["lost_contacts"] = [json.dumps(lst) for lst in lost_contacts_per_age]
+        df["lost_matrices"] = [json.dumps(mat.tolist()) for mat in lost_matrices]
         all_transitions.append(df)
     # title = 'Re: '+ ' '.join([f'{o:.3f}' for o in (returns.mean(0)*env.scale)[objectives]])
     title = 'Re: '+ ' '.join([f'{o:.3f}' for o in (returns.mean(0)*scale)])

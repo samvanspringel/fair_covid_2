@@ -85,7 +85,22 @@ class EpiEnv(gym.Env):
 
         # simulate for a whole week, sum the daily rewards
         r_ari = r_arh = r_sr = 0.
-        r_sr_per_age = 0.
+        prop_lost_per_age = 0.
+        work_contacts = np.zeros(self.K)
+        school_contacts = np.zeros(self.K)
+        leisure_contacts = np.zeros(self.K)
+        weekly_lost_contacts = np.zeros(self.K)
+        total_weekly_contacts = np.zeros(self.K)
+        # --- accumulate 10×10 matrices for total and lost contacts per area -------------
+        work_total_matrix   = np.zeros((self.K, self.K))
+        school_total_matrix = np.zeros((self.K, self.K))
+        leisure_total_matrix = np.zeros((self.K, self.K))
+        total_contacts_matrix = np.zeros((self.K, self.K))
+        total_lost_matrix = np.zeros((self.K, self.K))
+
+        work_diff_matrix   = np.zeros((self.K, self.K))
+        school_diff_matrix = np.zeros((self.K, self.K))
+        leisure_diff_matrix = np.zeros((self.K, self.K))
         state_n = np.empty((self.days_per_timestep,) + self.observation_space.shape)
         event_n = np.zeros((self.days_per_timestep, 1), dtype=bool)
         for day in range(self.days_per_timestep):
@@ -127,15 +142,44 @@ class EpiEnv(gym.Env):
             # Lost contacts per age
             lost_matrix = (C_diff * S_s_n[None, i] * S_s_n[None, j]) + (C_diff * R_s_n[None, i] * R_s_n[None, j])
 
-            # Also compute a new array storing these lost contacts by age group i.
-            # We sum over environment dimension (axis=0) and the j dimension (axis=2), leaving i as axis=1.
-            r_sr_per_age += lost_matrix.sum(axis=(0, 2)) / self.N
+            total_matrix = (C_full * S_s_n[None, i] * S_s_n[None, j]) + (C_full * R_s_n[None, i] * R_s_n[None, j])
+            total_weekly_contacts += total_matrix.sum(axis=(0, 2)) / self.N
+
+            np.set_printoptions(precision=3, suppress=True, linewidth=200)
+
+            # --- per‑age‑group contacts for each area --------------------
+            # total_matrix shape: (6, 10, 10)
+            # 0 = home, 1 = work, 2 = transport, 3 = school, 4 = leisure, 5 = other
+            work_contacts += (total_matrix[1] + total_matrix[2]).sum(axis=1) / self.N
+            school_contacts  +=  total_matrix[3].sum(axis=1)               / self.N
+            leisure_contacts += (total_matrix[4] + total_matrix[5]).sum(axis=1) / self.N
+
+            # ---- accumulate matrices per area (10×10) --------------------------------
+            work_total_matrix   += total_matrix[1] + total_matrix[2]
+            school_total_matrix += total_matrix[3]
+            leisure_total_matrix += total_matrix[4] + total_matrix[5]
+
+            work_diff_matrix   += lost_matrix[1] + lost_matrix[2]
+            school_diff_matrix += lost_matrix[3]
+            leisure_diff_matrix += lost_matrix[4] + lost_matrix[5]
+
+            total_lost_matrix += lost_matrix.sum(0)/self.N
+            total_contacts_matrix += total_matrix.sum(0)/self.N
+
+
+            weekly_lost_contacts += lost_matrix.sum(axis=(0, 2)) / self.N
+
 
             # update state
             s = s_n
 
             self.C_diff_fairness = C_diff
 
+        #print("Average contacts work (per age group):    ", work_contacts)
+        #print("Average contacts school (per age group):  ", school_contacts)
+        #print("Average contacts leisure (per age group): ", leisure_contacts)
+        prop_lost_per_age = weekly_lost_contacts/total_weekly_contacts
+        prop_lost_matrix = total_lost_matrix/total_contacts_matrix
         # update current contact matrix
         self.current_C = C_target
         # update date
@@ -148,8 +192,20 @@ class EpiEnv(gym.Env):
         # next-state , reward, terminal?, info
         # provide action as proxy for current SCM, impacts progression of epidemic
         return (state_n, event_n, action.copy()), np.array([r_ari, r_arh, r_sr_w, r_sr_s, r_sr_l, r_sr.sum()]), False, \
-               {"ARI": r_ari, "ARH": r_arh, "R_SR_W": r_sr_w, "R_SR_S": r_sr_s, "R_SR_L": r_sr_l, "SB": r_sr.sum(),
-                "lost_contacts_per_age": r_sr_per_age, "action": action}
+               {
+                "lost_contacts_per_age": np.abs(weekly_lost_contacts),
+                "prop_lost_contacts_per_age": np.abs(prop_lost_per_age),
+                "total_contacts_school": school_contacts,
+                "total_contacts_work": work_contacts,
+                "total_contacts_leisure": leisure_contacts,
+                "total_contacts_matrix_school": school_total_matrix,
+                "total_contacts_matrix_work":   work_total_matrix,
+                "total_contacts_matrix_leisure": leisure_total_matrix,
+                "lost_contacts_matrix_school":  np.abs(school_diff_matrix),
+                "lost_contacts_matrix_work":    np.abs(work_diff_matrix),
+                "lost_contacts_matrix_leisure": np.abs(leisure_diff_matrix),
+                "inter_lost_contacts": prop_lost_matrix,
+                "action": action}
 
         #return (state_n, event_n, action.copy()), np.array([r_arh, r_sr.sum()]), False, {"lost_contacts_per_age": r_sr_per_age}
         #return (state_n, event_n, action.copy()), np.array([r_ari, r_arh, r_sr_w, r_sr_s, r_sr_l]), False, {"lost_contacts_per_age": r_sr_per_age}
@@ -184,7 +240,7 @@ class EpiEnv(gym.Env):
         ]
 
         age_groups = ["[0, 10[", "[10, 20[", "[20, 30[", "[30, 40[", "[40, 50[", "[50, 60[", "[60, 70[", "[70, 80[",
-                      "[80, 90[", "[90, inf["]
+                      "[80, 90[", "[90, ∞["]
 
         df = pd.DataFrame(data=self.model.current_state, index=compartments).T
 
