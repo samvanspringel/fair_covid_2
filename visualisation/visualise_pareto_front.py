@@ -1988,9 +1988,9 @@ if __name__ == "__main__":
     budget = 5
 
     all_measures = {
-        "sb": 9,
-        "sb_sbs": 2,
-        "sbs": 5,
+        # "sb": 9,
+        # "sb_sbs": 2,
+        # "sbs": 5,
         "abfta": 8,
         "sbs_abfta": 0
     }
@@ -1999,12 +1999,13 @@ if __name__ == "__main__":
     plot_hospitalization_risk_bar(age_groups, hospitalization_risks, save_dir=save_dir)
 
     for m, s in all_measures.items():
-        repr_policies = radar_plots(m, test=False)
+        repr_policies = radar_plots(m, test=True)
         print(repr_policies)
 
         measure_pcn = m
         model_paths_dir = f"/Users/samvanspringel/Documents/School/VUB/Master 2/Jaar/Thesis/Results/{measure_pcn}_results"
         scales = [800000, 11000, 50., 20, 50, 120, 24e4, 0.08]
+        #scales = [800000, 11000, 50., 20, 50, 120, 24e4, 1]
         scale = np.array(scales)
         make_budget_plots(measure_pcn, scale, model_paths_dir, repr_policies, save_dir=save_dir, interactive=False)
 

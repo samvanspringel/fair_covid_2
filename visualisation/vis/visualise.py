@@ -57,7 +57,7 @@ def radar_plots(measure, test=False):
     if not test:
         seeds = range(10)  # TODO 10
     else:
-        seeds = range(1)
+        seeds = range(2)
     # Single objective
     # requested_objectives = [["R"], ["SP"], ["IF"], ["EO"], ["PE"], ["PP"], ["OAE"], ["CSC"]]
     # R_Group_Ind
@@ -130,7 +130,7 @@ def radar_plots(measure, test=False):
         bud = [0, 2, 3, 4, 5]
         budgets = {b: f"budget_{b}" for b in bud}
     else:
-        bud = [0]
+        bud = [0, 2, 5]
         budgets = {b: f"budget_{b}" for b in bud}
 
     env_name = "fraud_detection" if is_fraud else "job_hiring"

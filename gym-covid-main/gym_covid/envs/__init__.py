@@ -142,7 +142,7 @@ for env_type in ('ODE', 'Binomial'):
     for discrete_actions in (False, True):
         for simulate_lockdown in (False, True):
             for until in (until_2020_09_01, until_2021_01_01):
-                for budget in (None, 2, 3, 4, 5):
+                for budget in (None, 2, 3, 4, 5, 8, 10):
                     b = f'Budget{budget}' if budget is not None else ''
                     a = 'Discrete' if discrete_actions else 'Continuous'
                     l = 'WithLockdown' if simulate_lockdown else ''
